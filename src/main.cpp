@@ -9,7 +9,7 @@
 #include "pros/motors.h"
 #include "pros/rtos.hpp"
 
-// <--------------------------------------------------------------- Setup --------------------------------------------------------------->
+// <--------------------------------------------------------------- Setup ------------------------------------------------------------------>
 // controller
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
@@ -25,7 +25,7 @@ namespace Motor{
 
 namespace Sensor{
     pros::Rotation lbR(10);
-    pros::Distance lbD(11);
+    pros::Distance lbD(11); // Del
     pros::Optical colorSort(12);
     pros::adi::DigitalIn autonSwitch('A');
 } // namspace Sensor
@@ -39,14 +39,14 @@ namespace Piston{
     pros::adi::DigitalOut pto('G');
 } // namespace Piston
 
-// Odom Sensors
+// <------------------------------------------------------------- Odom Sensors ------------------------------------------------------------->
 pros::Imu imu(2);
 pros::Rotation horizontalEnc(-16);
 pros::Rotation verticalEnc(-15);
 lemlib::TrackingWheel vertical_tracking_wheel(&verticalEnc, lemlib::Omniwheel::NEW_2 , 0.9); // Single
 lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.2); // Double Stacked
 
-// drivetrain settings
+// <---------------------------------------------------------------- Config ---------------------------------------------------------------->
 lemlib::Drivetrain drivetrain(&leftMotors, // left motor group
                               &rightMotors, // right motor group
                               11.5, // 11.5 inch track width
@@ -99,10 +99,10 @@ lemlib::ExpoDriveCurve steerCurve(1, // joystick deadband out of 127
 
 // create the chassis
 lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
-const int DELAY_TIME = 10;
 
 // <------------------------------------------------------------ Miscellaneous ------------------------------------------------------------>
 namespace Misc{
+    constexpr int DELAY = 10;
     void cdrift(float lV, float rV, int timeout, bool cst = true){
         (cst == true) ? (leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST), rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST)) : (leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_BRAKE), rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_BRAKE));
         leftMotors.move(lV);
@@ -113,23 +113,50 @@ namespace Misc{
     }
 } // namespace Misc
 
-// <-------------------------------------------------------------- Lady Brown ------------------------------------------------------------->
+// <-------------------------------------------------------------- Lady Brown ------------------------------------------------------------>
 namespace Lift{
-    int currS = 0, target = 0;
-    constexpr float RESET = 0;
-    constexpr float LOAD = 300;
-    constexpr float FREE = 600;
-    constexpr float SCORE = 2000;
-    constexpr float STARTING = 450;
-    constexpr float STATES[] = {RESET, STARTING, LOAD, FREE, SCORE};
+    int target = 0, pressCounter = 0;
+    constexpr int RESET = 0;
+    constexpr int LOAD = 300;
+    constexpr int FREE = 600;
+    constexpr int SCORE = 2000;
+    constexpr int STARTING = 150;
+    std::vector<int> STATES = {RESET, LOAD, SCORE};
+    // constexpr float STATES[] = {RESET, STARTING, LOAD, FREE, SCORE};
     constexpr int NUM_STATES = sizeof(STATES) / sizeof(STATES[0]);
     void setState(float state) { target = state; }
-    void move() { double kp = 0.5, error = target - Sensor::lbR.get_position(), velocity = kp * error; Motor::lb.move(velocity); }
+    void move() { 
+        double ukp = 0.5, dkp = 0.5, error = target - Sensor::lbR.get_position(), vU = ukp * error, vD = dkp * error; 
+        if(target == SCORE){
+            if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)){
+                Motor::lb.move(127);
+                pressCounter = 0;
+            }
+            else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)){
+                Motor::lb.move(-127);
+                pressCounter++;
+                if(Sensor::lbR.get_position() < 20){ setState(Lift::RESET); } // A
+            }
+            else{
+                Motor::lb.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+                Motor::lb.brake();
+                pressCounter = 0;
+            }
+            if(pressCounter > 50){ setState(Lift::RESET); }
+        }
+        if(std::fabs(error) < 5){ Motor::lb.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD); Motor::lb.brake(); }
+        else if(error> 0){ Motor::lb.move(vU); }
+        else Motor::lb.move(vD);
+        if(Sensor::lbR.get_position() < 20){ setState(Lift::RESET); } // A
+    }
 } //namespace Arm
 
-// <------------------------------------------------------------- Color Sort -------------------------------------------------------------->
+// <------------------------------------------------------------- Color Sort ------------------------------------------------------------->
 namespace Color{
     enum class colorVals{ BLUE, RED };
+    constexpr bool sRed = true; // True: Sort Red  Color::sRed;
+    constexpr bool sBlue = false; // False: Sort Blue Color::sBlue;
+    bool state = false;
     constexpr double rLow = 10.0, rHigh = 50.0, bLow = 164.0, bHigh = 213.5;
     bool ifSenseRed(int hue) { return (hue > rLow && Sensor::colorSort.get_hue() < rHigh) ?  true : false; }
     bool ifSenseBlue(int hue) { return (hue > bLow && Sensor::colorSort.get_hue() < bHigh) ? true : false; }
@@ -139,14 +166,15 @@ namespace Color{
             if(input == colorVals::BLUE && ifSenseBlue(colorV)){
                 Piston::sorter.set_value(true);
                 pros::delay(350);
-                Piston::sorter.set_value(false);
+                // Piston::sorter.set_value(false);
             }
             else if(input == colorVals::RED && ifSenseRed(colorV)){
                 Piston::sorter.set_value(true);
                 pros::delay(350);
-                Piston::sorter.set_value(false);
+                // Piston::sorter.set_value(false);
             }
-            pros::delay(10);
+            Piston::sorter.set_value(false);
+            pros::delay(Misc::DELAY);
         }
     }
 } // namespace Color
@@ -154,43 +182,27 @@ namespace Color{
 // <------------------------------------------------------------- Tier Three ------------------------------------------------------------->
 namespace Hang{
     const int UNWRAP_TIME = 700;
-    void string(){ Misc::cdrift(-127,-127,UNWRAP_TIME); }
-    void iter(int iterE, int cd){ Misc::cdrift(127,127,iterE); pros::delay(cd); }
+    void reset(){ Misc::cdrift(-127,-127,UNWRAP_TIME); }
+    void up(int iterE, int cd){ Misc::cdrift(127,127,iterE); pros::delay(cd); }
+    void iter(int iterE, int cd, int times){ for(int i=0;i<times;i++){ up(iterE,cd); reset(); }}
     void move(int iterE, int cd){
         Piston::pto.set_value(true);
         Misc::cdrift(15,15,200); // Gear init
-        // 1
-        iter(iterE,cd);
-        // Retract piston (?)
-        string();
-        // 2
-        iter(iterE,cd);
-        // Retract piston (?)
-        string();
-        // 3
-        iter(iterE,cd);
-        // Retract piston (?)
-        string();
+        iter(iterE, cd, 3);
     }
 } // namespace Tier
 
-// CS
-bool b_colorState = false;
-// True: Sort Red
-// False: Sort Blue
-
-// <--------------------------------------------------------------- Autons --------------------------------------------------------------->
+// <-------------------------------------------------------------- Auto Routes ----------------------------------------------------------->
 namespace Auton{
-    void test(){}
+    int state = 0;
+    void test() { Color::state = Color::sRed; }
 } // namespace Auton
 
-// AS
-int autonStateV2 = 0;
 void autonSelectSwitch(){
     while(1){
-        pros::delay(20);
-        if(Sensor::autonSwitch.get_new_press()){ autonStateV2++; if(autonStateV2>9) autonStateV2 = 0; } // 18 original
-        switch(autonStateV2){
+        pros::delay(Misc::DELAY);
+        if(Sensor::autonSwitch.get_new_press()){ Auton::state++; if(Auton::state>9) Auton::state = 0; } 
+        switch(Auton::state){
             case 0: pros::lcd::set_text(4, "Default Auton"); break;
             // case 1: pros::lcd::set_text(4, "Solo Red"); break;
             // case 2: pros::lcd::set_text(4, "Solo Blue"); break;
@@ -212,21 +224,12 @@ Color::colorVals getColor(bool colorValV3) { return colorValV3 ? Color::colorVal
 void initialize() {
     pros::lcd::initialize();
     pros::Task t_Select(autonSelectSwitch);
-    // pros::Task sorterC([&]() {
-    //     colorSortV2(getColor(b_colorState));
-    // });
-    pros::Task liftC([]{
-        while (1) {
-            Lift::move();
-            pros::delay(10);
-        }
-    });
+    pros::Task liftC([]{ while (1) { Lift::move(); pros::delay(Misc::DELAY); } });
     chassis.setPose(0, 0, 0);
     chassis.calibrate(); 
     Motor::intakeB.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     Sensor::colorSort.set_led_pwm(100);
-
     pros::Task screenTask([&]() {
         while (1) {
             pros::lcd::print(0, "X: %f", chassis.getPose().x); // x
@@ -238,16 +241,13 @@ void initialize() {
 }
 void disabled() {}
 void competition_initialize() {}
-
 ASSET(example_txt); // PP
+// <------------------------------------------------------------- Autonomous ------------------------------------------------------------->
 void autonomous() {
-    pros::Task sorterC([&]() {
-        colorSortV2(getColor(b_colorState));
-    });
-    // pros::delay(100000000);
-    switch (autonStateV2) {
+    pros::Task sorterC([&]() { colorSortV2(getColor(Color::state)); });
+    switch (Auton::state) {
         case 0: Auton::test(); break;
-        // case 1: soloRed(); break;//solo  red
+        // case 1: soloRed(); break;//solo red
         // case 2: soloBlue(); break;//solo blue
         // case 3: redNegQual(); break;//ringside red
         // case 4: blueNegQual(); break;//rindside blue
@@ -262,14 +262,11 @@ void autonomous() {
 
 // <--------------------------------------------------------------- Driver --------------------------------------------------------------->
 void opcontrol() {
-    pros::Task sorterC([&]() {
-        colorSortV2(getColor(b_colorState));
-    });
+    pros::Task sorterC([&]() { colorSortV2(getColor(Color::state)); });
     bool b_mogo = false, b_pto = false;
 	leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST);
 	rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST);
     Sensor::lbR.reset_position();
-    
     while(1) {
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
@@ -282,8 +279,9 @@ void opcontrol() {
         if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) { Motor::intakeB.move(127); Motor::intakeT.move(-127); }
         else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) { Motor::intakeB.move(-127); Motor::intakeT.move(-127); }
         else{ Motor::intakeB.brake(); Motor::intakeT.brake(); }
-        
+        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) { Lift::target++; }
+        else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) { Lift::target--; }
         if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)) Hang::move(1500,100);
-        pros::delay(10);
+        pros::delay(Misc::DELAY);
     }
-// <--------------------------------------------------------------- End --------------------------------------------------------------->
+}
