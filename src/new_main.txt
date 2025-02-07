@@ -1,0 +1,279 @@
+#include <bits/stdc++.h>
+// #include <iomanip>
+#include "main.h"
+#include "lemlib/api.hpp" // IWYU pragma: keep
+// #include "liblvgl/lvgl.h"
+// #include "liblvgl/llemu.hpp"
+#include "brainScreenLVGL.h"
+#include "pros/motors.h"
+#include "pros/rtos.hpp"
+
+// controller
+pros::Controller controller(pros::E_CONTROLLER_MASTER);
+
+// DriveTrain
+pros::MotorGroup leftMotors({-1, -2, -3}, pros::MotorGearset::blue);
+pros::MotorGroup rightMotors({4, 5, 6}, pros::MotorGearset::blue); 
+
+namespace Motor{
+    pros::Motor intakeB(7, pros::MotorGearset::blue);
+    pros::Motor intakeT(8, pros::MotorGearset::blue);
+    pros::Motor lb(9, pros::MotorGearset::blue);
+} // namespace Motor
+
+namespace Sensor{
+    pros::Rotation lbR(10);
+    pros::Distance lbD(11);
+    pros::Optical colorSort(12);
+    pros::adi::DigitalIn autonSwitch('A');
+} // namspace Sensor
+
+namespace Piston{
+    pros::adi::DigitalOut lightsaberL('B');
+    pros::adi::DigitalOut lightsaberR('C');
+    pros::adi::DigitalOut intake('D');
+    pros::adi::DigitalOut mogo('E');
+    pros::adi::DigitalOut sorter('F');
+    pros::adi::DigitalOut pto('G');
+} // namespace Piston
+
+// Odom Sensors
+pros::Imu imu(2);
+pros::Rotation horizontalEnc(-16);
+pros::Rotation verticalEnc(-15);
+lemlib::TrackingWheel vertical_tracking_wheel(&verticalEnc, lemlib::Omniwheel::NEW_2 , 0.9); // Single
+lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.2); // Double Stacked
+
+// drivetrain settings
+lemlib::Drivetrain drivetrain(&leftMotors, // left motor group
+                              &rightMotors, // right motor group
+                              11.5, // 11.5 inch track width
+                              lemlib::Omniwheel::NEW_325, // using new 3.25" omnis
+                              450, // drivetrain rpm is 450
+                              2 // horizontal drift is 2. If we had traction wheels, it would have been 8
+);
+
+lemlib::ControllerSettings linearController (8, // proportional gain (kP)
+                                             0, // integral gain (kI)
+                                             5, // derivative gain (kD)
+                                             3, // anti windup
+                                             1, // small error range, in inches
+                                             100, // small error range timeout, in milliseconds
+                                             3, // large error range, in inches
+                                             500, // large error range timeout, in milliseconds
+                                             5 // maximum acceleration (slew)
+);
+
+lemlib::ControllerSettings angularController (3, // proportional gain (kP)
+                                              0, // integral gain (kI)
+                                              15, // derivative gain (kD)
+                                              3, // anti windup
+                                              1, // small error range, in inches
+                                              100, // small error range timeout, in milliseconds
+                                              3, // large error range, in inches
+                                              500, // large error range timeout, in milliseconds
+                                              0 // maximum acceleration (slew)
+);
+
+// sensors for odometry
+lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
+                            nullptr, // vertical tracking wheel 2, set to nullptr as we don't have a second one
+                            &horizontal_tracking_wheel, // horizontal tracking wheel
+                            nullptr, // horizontal tracking wheel 2, set to nullptr as we don't have a second one
+                            &imu // inertial sensor
+);
+
+// input curve for throttle input during driver control
+lemlib::ExpoDriveCurve throttleCurve(1, // joystick deadband out of 127
+                                     0, // minimum output where drivetrain will move out of 127
+                                     1 // expo curve gain
+);
+
+// input curve for steer input during driver control
+lemlib::ExpoDriveCurve steerCurve(1, // joystick deadband out of 127
+                                  0, // minimum output where drivetrain will move out of 127
+                                  1 // expo curve gain
+);
+
+// create the chassis
+lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
+const int DELAY_TIME = 10;
+
+namespace Misc{
+    void cdrift(float lV, float rV, int timeout, bool cst = true){
+        (cst == true) ? (leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST), rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST)) : (leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_BRAKE), rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_BRAKE));
+        leftMotors.move(lV);
+        rightMotors.move(rV);
+        pros::delay(timeout);
+        leftMotors.brake();
+        rightMotors.brake();
+    }
+} // namespace Misc
+
+namespace Lift{
+    int currS = 0, target = 0;
+    constexpr float RESET = 0;
+    constexpr float LOAD = 300;
+    constexpr float FREE = 600;
+    constexpr float SCORE = 2000;
+    constexpr float STARTING = 450;
+    constexpr float STATES[] = {RESET, STARTING, LOAD, FREE, SCORE};
+    constexpr int NUM_STATES = sizeof(STATES) / sizeof(STATES[0]);
+    void setState(float state) { target = state; }
+    void move() { double kp = 0.5, error = target - Sensor::lbR.get_position(), velocity = kp * error; Motor::lb.move(velocity); }
+} //namespace Arm
+
+namespace Color{
+    enum class colorVals{ BLUE, RED };
+    constexpr double rLow = 10.0, rHigh = 50.0, bLow = 164.0, bHigh = 213.5;
+    bool ifSenseRed(int hue) { return (hue > rLow && Sensor::colorSort.get_hue() < rHigh) ?  true : false; }
+    bool ifSenseBlue(int hue) { return (hue > bLow && Sensor::colorSort.get_hue() < bHigh) ? true : false; }
+    void colorSortV2(colorVals input){
+        while(1){
+            int colorV = Sensor::colorSort.get_hue();
+            if(input == colorVals::BLUE && ifSenseBlue(colorV)){
+                Piston::sorter.set_value(true);
+                pros::delay(350);
+                Piston::sorter.set_value(false);
+            }
+            else if(input == colorVals::RED && ifSenseRed(colorV)){
+                Piston::sorter.set_value(true);
+                pros::delay(350);
+                Piston::sorter.set_value(false);
+            }
+            pros::delay(10);
+        }
+    }
+} // namespace Color
+
+// T3
+namespace Hang{
+    const int UNWRAP_TIME = 700;
+    void string(){ Misc::cdrift(-127,-127,UNWRAP_TIME); }
+    void iter(int iterE, int cd){ Misc::cdrift(127,127,iterE); pros::delay(cd); }
+    void move(int iterE, int cd){
+        Piston::pto.set_value(true);
+        Misc::cdrift(15,15,200); // Gear init
+        // 1
+        iter(iterE,cd);
+        // Retract piston (?)
+        string();
+        // 2
+        iter(iterE,cd);
+        // Retract piston (?)
+        string();
+        // 3
+        iter(iterE,cd);
+        // Retract piston (?)
+        string();
+    }
+} // namespace Tier
+
+// CS
+bool b_colorState = false;
+// True: Sort Red
+// False: Sort Blue
+
+namespace Auton{
+    void test(){}
+} // namespace Auton
+
+// AS
+int autonStateV2 = 0;
+void autonSelectSwitch(){
+    while(1){
+        pros::delay(20);
+        if(Sensor::autonSwitch.get_new_press()){ autonStateV2++; if(autonStateV2>9) autonStateV2 = 0; } // 18 original
+        switch(autonStateV2){
+            case 0: pros::lcd::set_text(4, "Default Auton"); break;
+            // case 1: pros::lcd::set_text(4, "Solo Red"); break;
+            // case 2: pros::lcd::set_text(4, "Solo Blue"); break;
+            // case 3: pros::lcd::set_text(4, "Red_ringside"); break;
+            // case 4: pros::lcd::set_text(4, "Blue_ringside"); break;
+            // case 5: pros::lcd::set_text(4, "Red_safeRingside"); break;
+            // case 6: pros::lcd::set_text(4, "Blue_safeRingside"); break;
+            // case 7: pros::lcd::set_text(4, "Red Ring Rush"); break;
+            // case 8: pros::lcd::set_text(4, "Blue Ring Rush"); break;
+            // case 9: pros::lcd::set_text(4, "Skills"); break;
+            default: pros::lcd::set_text(4, "Default Auton"); break;
+        }
+    }
+}
+
+Color::colorVals getColor(bool colorValV3) { return colorValV3 ? Color::colorVals::RED : Color::colorVals::BLUE; } // Sort ? Red : Blue
+
+void initialize() {
+    pros::lcd::initialize();
+    pros::Task t_Select(autonSelectSwitch);
+    // pros::Task sorterC([&]() {
+    //     colorSortV2(getColor(b_colorState));
+    // });
+    pros::Task liftC([]{
+        while (1) {
+            Lift::move();
+            pros::delay(10);
+        }
+    });
+    chassis.setPose(0, 0, 0);
+    chassis.calibrate(); 
+    Motor::intakeB.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+    Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+    Sensor::colorSort.set_led_pwm(100);
+
+    pros::Task screenTask([&]() {
+        while (1) {
+            pros::lcd::print(0, "X: %f", chassis.getPose().x); // x
+            pros::lcd::print(1, "Y: %f", chassis.getPose().y); // y
+            pros::lcd::print(2, "Theta: %f", chassis.getPose().theta); // heading 
+            pros::delay(50);
+        }
+    });
+}
+void disabled() {}
+void competition_initialize() {}
+
+ASSET(example_txt); // PP
+void autonomous() {
+    pros::Task sorterC([&]() {
+        colorSortV2(getColor(b_colorState));
+    });
+    // pros::delay(100000000);
+    switch (autonStateV2) {
+        case 0: Auton::test(); break;
+        // case 1: soloRed(); break;//solo  red
+        // case 2: soloBlue(); break;//solo blue
+        // case 3: redNegQual(); break;//ringside red
+        // case 4: blueNegQual(); break;//rindside blue
+        // case 5: safeRedNegQual(); break;//safe ringside red
+        // case 6: safeBlueNegQual(); break;//safe ringside blue
+        // case 7: ringRushRed(); break;//safe ringside blue
+        // case 8: ringRushBlue(); break;//safe ringside blue
+        // case 9: skills(); break;
+        default: Auton::test(); break;
+    }
+}
+void opcontrol() {
+    pros::Task sorterC([&]() {
+        colorSortV2(getColor(b_colorState));
+    });
+    bool b_mogo = false, b_pto = false;
+	leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST);
+	rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST);
+    Sensor::lbR.reset_position();
+    
+    while(1) {
+        int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
+        int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
+        chassis.arcade(leftY, rightX);
+		if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)) { b_mogo = !b_mogo; Piston::mogo.set_value(b_mogo); }
+        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) { b_pto = !b_pto; Piston::pto.set_value(b_pto); } // Testing | Del 
+		(controller.get_digital(pros::E_CONTROLLER_DIGITAL_LEFT)) ? Piston::lightsaberL.set_value(true) : Piston::lightsaberL.set_value(false);
+        (controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT)) ? Piston::lightsaberR.set_value(true) : Piston::lightsaberR.set_value(false);
+        (controller.get_digital(pros::E_CONTROLLER_DIGITAL_A)) ? Piston::intake.set_value(true) : Piston::intake.set_value(false);
+        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) { Motor::intakeB.move(127); Motor::intakeT.move(-127); }
+        else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) { Motor::intakeB.move(-127); Motor::intakeT.move(-127); }
+        else{ Motor::intakeB.brake(); Motor::intakeT.brake(); }
+        
+        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)) Hang::move(1500,100);
+        pros::delay(10);
+    }

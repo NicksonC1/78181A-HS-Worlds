@@ -1,0 +1,3230 @@
+#include <bits/stdc++.h>
+// #include <iomanip>
+#include "main.h"
+#include "lemlib/api.hpp" // IWYU pragma: keep
+// #include "liblvgl/lvgl.h"
+// #include "liblvgl/llemu.hpp"
+#include "brainScreenLVGL.h"
+#include "pros/motors.h"
+#include "pros/rtos.hpp"
+
+// controller
+pros::Controller controller(pros::E_CONTROLLER_MASTER);
+
+// motor groups
+pros::MotorGroup leftMotors({-17, -18, 6}, pros::MotorGearset::blue);
+pros::MotorGroup rightMotors({11, 13, -14}, pros::MotorGearset::blue); 
+
+// Motors
+pros::Motor m_intake(20);
+pros::Motor m_lift(-12);
+
+// Sensors
+pros::Rotation s_lift(10);
+pros::Distance s_backDist(5);
+pros::Distance s_lbDist(4);
+pros::Optical s_colorSort(7);
+pros::adi::DigitalIn s_autonSwitch('D');
+pros::Optical s_cSortselector(8);
+
+// Pistons
+pros::adi::DigitalOut p_stick('B');
+pros::adi::DigitalOut p_intake('A');
+pros::adi::DigitalOut p_mogo('C');
+pros::adi::DigitalOut p_sorter('E');
+
+// Odom Sensors
+pros::Imu imu(2);
+pros::Rotation horizontalEnc(16);
+pros::Rotation verticalEnc(15);
+lemlib::TrackingWheel vertical_tracking_wheel(&verticalEnc, 1.99 , 0.9);//-3
+lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.2);//lemlib::Omniwheel::NEW_2//0.1
+
+// drivetrain settings
+lemlib::Drivetrain drivetrain(&leftMotors, // left motor group
+                              &rightMotors, // right motor group
+                              11.5, // 10 inch track width
+                              lemlib::Omniwheel::NEW_275, // using new 4" omnis
+                              480, // drivetrain rpm is 360
+                              2 // horizontal drift is 2. If we had traction wheels, it would have been 8
+);
+
+lemlib::ControllerSettings linearController(  8, // proportional gain (kP)
+                                              0, // integral gain (kI)
+                                              5, // derivative gain (kD)
+                                              3, // anti windup
+                                              1, // small error range, in inches
+                                              100, // small error range timeout, in milliseconds
+                                              3, // large error range, in inches
+                                              500, // large error range timeout, in milliseconds
+                                              5 // maximum acceleration (slew)
+);
+
+lemlib::ControllerSettings angularController (3, // proportional gain (kP)
+                                              0, // integral gain (kI)
+                                              15, // derivative gain (kD)
+                                              3, // anti windup
+                                              1, // small error range, in inches
+                                              100, // small error range timeout, in milliseconds
+                                              3, // large error range, in inches
+                                              500, // large error range timeout, in milliseconds
+                                              0 // maximum acceleration (slew)
+);
+
+// sensors for odometry
+lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
+                            nullptr, // vertical tracking wheel 2, set to nullptr as we don't have a second one
+                            &horizontal_tracking_wheel, // horizontal tracking wheel
+                            nullptr, // horizontal tracking wheel 2, set to nullptr as we don't have a second one
+                            &imu // inertial sensor
+);
+
+// input curve for throttle input during driver control
+lemlib::ExpoDriveCurve throttleCurve(1, // joystick deadband out of 127
+                                     0, // minimum output where drivetrain will move out of 127
+                                     1 // expo curve gain
+);
+
+// input curve for steer input during driver control
+lemlib::ExpoDriveCurve steerCurve(1, // joystick deadband out of 127
+                                  0, // minimum output where drivetrain will move out of 127
+                                  1 // expo curve gain
+);
+
+// create the chassis
+lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
+
+constexpr double rLow = .0, rHigh = 39.0, bLow = 164.0, bHigh = 213.5;
+const int DELAY_TIME = 10;
+
+bool ifSenseRed(int hue) { 
+    if(hue > rLow && s_colorSort.get_hue() < rHigh) return true;
+    return false;
+}
+
+bool ifSenseRedV2(int hue) { 
+    if(hue > 10.0 && s_colorSort.get_hue() < 50.0) return true;
+    return false;
+}
+
+bool ifSenseBlue(int hue) {
+    if(hue > bLow && s_colorSort.get_hue() < bHigh) return true;
+    return false;
+}
+
+void driveUntilIntaked(int lSpeed, int rSpeed){
+    int hue;
+    do{
+        hue = s_colorSort.get_hue();
+        chassis.tank(lSpeed, rSpeed);
+        pros::delay(10);
+    }
+    while(!(ifSenseRed(hue))); 
+}
+
+// void waitUntilIntaked(){
+//     int hue;
+//     do{
+//         hue = s_colorSort.get_hue();
+//         m_intake.move(127);
+//         pros::delay(10);
+//     }
+//     while(!(ifSenseRed(hue)));
+//     m_intake.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+//     m_intake.brake();
+// }
+
+void waitUntilWall(){
+    const int DIST_BACK = 155;
+    do{
+        leftMotors.move(-50);
+        rightMotors.move(-50);
+        pros::delay(10);
+    }
+    while(s_backDist.get_distance() > DIST_BACK);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+
+int lift_state = 0, lift_error = 0, errorRange = 200, errorVal = 100; 
+double lift_kp_down = 0.3, lift_kp_up = 0.55, pressCounter; 
+constexpr int l_dist_target[] = {50, 145};
+
+enum class colorVals{ BLUE, RED };
+// colorVals intialize_sort(){
+//     colorVals color;
+//     if(s_cSortselector.get_hue() > 203){//If not blue, return red
+//         color = colorVals::BLUE;
+//     }
+//     else {
+//         color = colorVals::RED;
+//     }
+//     return color;
+// }
+
+
+
+int intakeSpeed = 100;
+
+//L1: True, 127 
+void colorSort(colorVals input){
+    // Blue sort
+    if(input == colorVals::BLUE){
+        if(ifSenseBlue(s_colorSort.get_hue())){//ifSenseBlue(s_colorSort.get_hue())
+            while(ifSenseBlue(s_colorSort.get_hue()) &&  s_colorSort.get_proximity() < 130 ){//ifSenseBlue(s_colorSort.get_hue() && s_colorSort.get_proximity() > 160)
+                pros::delay(10);
+                m_intake.move(intakeSpeed);
+            }
+            m_intake.move(-40);
+            pros::delay(100);
+            m_intake.move(110);
+            pros::delay(100);
+            m_intake.move(-40);
+            pros::delay(100);
+        }
+    }
+    //Red Sort
+    else if(input == colorVals::RED){
+        if(ifSenseRed(s_colorSort.get_hue())){
+            while(ifSenseBlue(s_colorSort.get_hue())){
+                pros::delay(10);
+                m_intake.move(intakeSpeed);
+            }
+            m_intake.move(-40);
+            pros::delay(100);
+            m_intake.move(110);
+            pros::delay(100);
+            m_intake.move(-40);
+            pros::delay(100);
+        }
+    }
+
+}
+// //Driver Variable
+// //0: 
+// // int drive_intake[3] = {forwards};
+// bool drive_Jam;
+// int drive_intake_JamCounter;
+
+// bool forward_intake;
+// bool Rev_intake;
+
+// void driver_intake(colorVals drive_color){
+//      int intakeJamCounter = 0;
+//      bool intakeJam = false;
+//      s_colorSort.set_led_pwm(100);
+//      while(1){
+//         pros::delay(10);
+//      if(forward_intake && !intakeJam){
+//         // if(!intakeJam){// &&(!intakeJam)
+//             m_intake.move(110);//110
+//             if(m_intake.get_torque() > 0.9) intakeJamCounter++;
+//             else intakeJamCounter = 0;
+//             if(intakeJamCounter > 10 ){//intake jam for 10x10 ms
+//                 // if(lift_state == 1) intakeJam = false;//prevents reverse intake when jammed in ladybrown
+//                 intakeJam = true;
+//             }
+//             colorSort(drive_color);
+        
+//     }
+//     else if(forward_intake && intakeJam){
+//         m_intake.move(-100);//Dont touch this value, its for intakeJam !!!!!
+//         pros::delay(100);
+//         intakeJam= false;   
+//     }
+//     else m_intake.move(0);
+    
+//     if(Rev_intake){
+//         m_intake.move(-127);
+//     } 
+//     else m_intake.move(0);        
+
+// }
+
+
+//waits for 4 second
+//Auton Variable
+
+bool intakeSpin = false;
+bool auto_intake_IO = false;//DONT TOUCH THWAW VARIABLE
+void auto_intake(colorVals autoColor){//sorts color you dont want
+    int autoJamCounter = 0;
+    bool auto_intakeJam = false;
+    s_colorSort.set_led_pwm(100);
+    while(1){
+        if(auto_intake_IO && intakeSpin){// &&(!auto_intakeJam) :: used to be in if-condition
+            m_intake.move(127);//110
+        }
+        else if(auto_intake_IO && intakeSpin && auto_intakeJam){
+            m_intake.move(-100);//Dont touch this value, its for intakeJam !!!!!
+            pros::delay(100);
+            auto_intakeJam = false;       
+        }
+        else if(auto_intake_IO && !intakeSpin) {
+            m_intake.brake();
+        }
+        else{} 
+        pros::delay(10);
+    }
+}
+
+// bool drive_Spin = false;
+// bool drive_Rev = false;
+// void drive_intake(colorVals drive_input){
+//     // int driveJam = 0;
+//     // bool driveIsJam = false;
+//     while(1){
+//         pros::lcd::clear_line(0);
+//         if(drive_Spin){
+//             m_intake.move(127);
+//             if(drive_input == colorVals::BLUE){
+//                 if((s_colorSort.get_hue() > 170) && (s_colorSort.get_hue() < 215)){
+//                     m_intake.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+//                     while((s_colorSort.get_hue() > 175) && (s_colorSort.get_hue() < 215)){
+//                         m_intake.move(95);
+//                     }
+//                     m_intake.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+//                     m_intake.brake();
+//                     pros::delay(300);
+//                 }
+//             }
+//             if(drive_input == colorVals::RED){
+//                 if((s_colorSort.get_hue() > 8) && (s_colorSort.get_hue() < 42)){
+//                     m_intake.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+//                     while((s_colorSort.get_hue() > 8) && (s_colorSort.get_hue() < 42)){
+//                         m_intake.move(95);
+//                     }
+//                     m_intake.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+//                     m_intake.brake();
+//                     pros::delay(300);
+//                 }
+//             }
+            
+//             // if(m_intake.get_torque() > 1.0) driveJam++;
+//             // else driveJam = 0; 
+            
+//             // if(driveJam*10 > 250 ) driveIsJam = true;//In terms of milisecond
+            
+//             // if(driveIsJam){
+//             //     m_intake.move(-127);
+//             //     pros::delay(400);
+//             //     m_intake.move(127);
+//             //     driveIsJam = false;
+//             // }
+//         }
+//         else if(drive_Rev) m_intake.move(-127);
+//         else m_intake.move(0);
+
+     
+//         pros::delay(5);
+//     }
+// }
+
+void lb_reset(){
+    // Honestly just do -127 and it'll work
+    // stage1_active = false;
+    do{
+        m_lift.move(-127);
+        pros::delay(10);
+
+    }
+    while(m_lift.get_torque() < 1);
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+    m_lift.brake();
+}
+
+bool stage1_active = false;
+void lb_stage1(int timeout_inp){
+    int timeout = 0;
+    lift_error = l_dist_target[1] - s_lbDist.get_distance();
+    while(!(std::fabs(lift_error) < 5) && timeout*10 < timeout_inp){
+        lift_error = l_dist_target[1] - s_lbDist.get_distance();
+        if(lift_error> 0){ m_lift.move(lift_error*lift_kp_up); }
+        else m_lift.move(lift_error*lift_kp_down);
+        pros::delay(10);
+        timeout++;
+        pros::lcd::print(5,"%d",lift_error);
+    }
+    if(timeout*10 > timeout_inp){ lb_reset(); }
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+}
+
+bool lb_is_active = false;
+void lb_nth(){//time_inp is in miliseconds
+    lift_error =  l_dist_target[1] - s_lbDist.get_distance();
+    while(!(std::fabs(lift_error) < 5) && lb_is_active == true){//3
+        lift_error =  l_dist_target[1] - s_lbDist.get_distance();
+        if(lift_error> 0){ //When error is positive, ladybrown rotates arm forward
+            m_lift.move(lift_error*lift_kp_up);
+        }
+        else m_lift.move(lift_error*lift_kp_down);
+        pros::delay(10);
+    }
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+}
+
+void lb_free(int timeout_inp){//time_inp is in miliseconds
+    int timeout = 0;
+    // stage1_active = true; Open for antiJam
+    int lift_error =  190 - s_lbDist.get_distance();
+    while(!(std::fabs(lift_error) < 5) && timeout*10 < timeout_inp){//3
+        lift_error =  190 - s_lbDist.get_distance();
+        if(lift_error> 0){ //When error is positive, ladybrown rotates arm forward
+            m_lift.move(lift_error*lift_kp_up);
+        }
+        else m_lift.move(lift_error*lift_kp_down);
+        pros::delay(DELAY_TIME);
+        timeout++;
+        pros::lcd::print(5,"%d",lift_error);
+    }
+    if(timeout*10 > timeout_inp){
+        lb_reset();
+    }
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+}
+
+void fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk(){ // literally just dunk
+    // stage1_active = true;
+    do{
+        m_lift.move(127);
+    }
+    while(m_lift.get_torque() < 1.05);
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+}
+
+void lb_minorLift(){
+    lift_error = 170 - s_lbDist.get_distance();
+    while(lift_error > 0){ //When error is positive, ladybrown rotates arm forward
+        lift_error =  (170 - s_lbDist.get_distance());
+        m_lift.move(lift_error*lift_kp_up);
+        pros::delay(DELAY_TIME);
+    }
+    m_lift.move(lift_error*lift_kp_down);
+    
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+    
+}
+
+int i_lbState = 0;
+void lb_general(){
+    while(1){
+        // if(i_lbState > 3) i_lbState = 0; 
+        if(i_lbState==0) lb_reset();
+        else if(i_lbState==1) lb_stage1(1200);
+        else if(i_lbState==2) lb_free(1200);
+        else if(i_lbState==3) fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+        // switch(i_lbState){
+        //     case 0: lb_reset(); break;
+        //     case 1: lb_stage1(1200); break;
+        //     case 2: lb_free(1200); break;
+        //     case 3: fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk(); break;
+        //     default: lb_reset(); break;
+        // }
+        pros::delay(20);
+    }
+}
+
+// constexpr int dunkTarget = 18800;
+// void dunk(){
+//     int l_error = dunkTarget - s_lift.get_position();
+//     while(l_error > 0){
+//         int error = dunkTarget - s_lift.get_position();
+//         m_lift.move(80);
+//     }
+//     m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+//     m_lift.brake();
+// }
+
+
+// void misdirectionpushcrossdoublebehindthebacktween012kyriejellywindmilllayup(){
+//     // intake to point (doesn't work anymore lmfao)
+//     do{
+//         m_intake.move(127);
+//     }
+//     while(s_colorSort.get_proximity() < 35);
+//     m_intake.brake();
+// }
+
+void colorSortV2(colorVals input){
+    while(1){
+        int colorV = s_colorSort.get_hue();
+        if(input == colorVals::BLUE && ifSenseBlue(colorV)){
+            p_sorter.set_value(true);
+            pros::delay(350);
+            p_sorter.set_value(false);
+        }
+        else if(input == colorVals::RED && ifSenseRed(colorV)){
+            p_sorter.set_value(true);
+            pros::delay(350);
+            p_sorter.set_value(false);
+        }
+        pros::delay(10);
+    }
+}
+
+// void colorSortV2(colorVals input){
+//     while(1){
+//         int colorV = s_colorSort.get_hue();
+//         if(input == colorVals::BLUE && ifSenseBlue(colorV)){
+//             p_sorter.set_value(true);
+//             pros::delay(350);
+//         }
+//         else if(input == colorVals::RED && ifSenseRed(colorV)){
+//             p_sorter.set_value(true);
+//             pros::delay(350);
+//         }
+//         p_sorter.set_value(false);
+//         pros::delay(10);
+//     }
+// }
+
+void allianceStake_macro(){
+    leftMotors.move(20);
+    rightMotors.move(20);
+    pros::delay(250);
+    chassis.setBrakeMode(pros::E_MOTOR_BRAKE_HOLD);
+    leftMotors.brake();
+    rightMotors.brake();
+    pros::delay(50);
+    chassis.setBrakeMode(pros::E_MOTOR_BRAKE_COAST);
+}
+
+bool b_colorState = false;
+// False: Sort Blue
+// True: Sort Red
+
+void test(){
+    // lb_stage1(2000);
+    // pros::delay(3000);
+    // fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    // pros::delay(3000);
+    // lb_reset();
+}
+
+void negCornerBase(){
+
+}
+
+void redNegBase(){
+    pros::Task task_autoIntake([&]() {
+        auto_intake(colorVals::BLUE);
+    });
+    b_colorState = false;
+//defaults
+    chassis.setPose(-53,9,-114);
+    chassis.moveToPoint(-59 , 5.8 , 1000);
+    
+//dunk
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    intakeSpin = true;
+    m_lift.move(-127);
+    
+//move to mogo
+    chassis.moveToPoint(-22, 25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+    pros::delay(1200);
+    p_mogo.set_value(true);
+    pros::delay(100);
+    m_lift.brake();
+    // m_intake.move(127);
+    intakeSpin = true;
+    
+//move to first stack
+    chassis.turnToPoint(-10.5, 38, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-10.5, 38, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(150);
+    
+//move back from first stack
+    leftMotors.move(-60);
+    rightMotors.move(-60);
+    pros::delay(250);
+    leftMotors.brake();
+    rightMotors.brake();
+//go to middle stack
+    chassis.turnToPoint(-24, 48, 750, {.forwards = true,.maxSpeed=60,.minSpeed=0});
+    chassis.moveToPoint(-24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+//move to last stack
+    chassis.turnToPoint(-48, 0, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // pros::delay(450);
+    chassis.moveToPoint(-48, 3.5, 2000, {.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});//get stack
+    chassis.waitUntil(15);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();        
+    p_intake.set_value(false);
+    pros::delay(200);
+    chassis.moveToPoint(-48, 7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+    chassis.waitUntilDone();
+    pros::delay(500);
+}
+void redNegQual(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    redNegBase(); 
+    
+    // go to ladder
+    m_lift.move(127);
+    chassis.moveToPoint(-24, 24, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(-12, 12, 1300, {.forwards = true,.maxSpeed=80,.minSpeed=0});
+    chassis.waitUntilDone();
+
+    //move forward towards ladder
+    leftMotors.move(20);
+    rightMotors.move(20);
+    pros::delay(600);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+// void redNegElim(){
+//     redNegBase();
+
+// }
+void redPosBase(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = false;
+    chassis.setPose(-54, -59, 270);
+    chassis.moveToPoint(-26, -59, 1500, {.forwards =false,.minSpeed=10});
+    chassis.moveToPose(-2.5, -48, 270, 2000, {.forwards = false, .lead = 0.35,  .minSpeed = 10} );
+    chassis.waitUntilDone();
+
+     //Clamp middle mogo
+    p_mogo.set_value(true);
+    pros::delay(300);
+    // m_intake.move(120);
+    // m_intake.move(127); //intakeSpin= true;
+    intakeSpin = true;
+
+    //go to first stack
+    chassis.moveToPoint(-26, -42, 2000,{.maxSpeed = 80});
+    pros::delay(800);
+
+    //throw middle mogo aside
+    chassis.turnToHeading(45, 2000, {.direction = AngularDirection:: CCW_COUNTERCLOCKWISE, .maxSpeed = 55});//{.direction = AngularDirection:: CCW_COUNTERCLOCKWISE}
+    chassis.waitUntilDone();
+
+    //unclamp middle mogo
+    p_mogo.set_value(false); 
+    pros::delay(200);
+    chassis.turnToPoint(-24,-24, 2000);//face second mogo
+    //chassis.waitUntilDone(); Add this if you dont want bot to curve
+    chassis.moveToPoint(-24, -24, 2000, {.forwards = false,.maxSpeed = 50}); 
+    chassis.waitUntilDone();
+    
+    //get second mogo
+    // chassis.waitUntilDone();
+    p_mogo.set_value(true); 
+    pros::delay(200);
+}
+void redPosQual(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    redPosBase();
+    // Get Stack
+    chassis.turnToHeading(323, 2000, {.maxSpeed = 90});//turn to ALLIANCE STAKE RING STACK
+    p_intake.set_value(true);
+    chassis.moveToPoint(-47, -2, 2000, {.maxSpeed = 55});
+    chassis.waitUntilDone();
+    p_intake.set_value(false);
+    pros::delay(300);
+    chassis.moveToPoint(-46, -3, 2000, {.forwards = false, .maxSpeed = 50});
+    
+//Touch Ladder
+    // chassis.turnToPoint(-24, -24, 2000, {.forwards = false});
+    chassis.turnToHeading(90, 2000);
+    chassis.moveToPoint(-31, -2, 2000, {.maxSpeed = 50});
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+}
+void redPosElim(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    redPosBase();
+    chassis.turnToHeading(323, 2000, {.maxSpeed = 90});//turn to ALLIANCE STAKE RING STACK
+    p_intake.set_value(true);
+    chassis.moveToPoint(-47, -2, 2000, {.maxSpeed = 55});
+    chassis.waitUntilDone();
+    p_intake.set_value(false);
+    pros::delay(300);
+    chassis.moveToPoint(-43, -5, 2000, {.forwards = false, .maxSpeed = 50});
+    chassis.turnToHeading(180, 2000);
+    chassis.turnToPoint(-65, -43, 2000, {.maxSpeed = 100});
+    chassis.moveToPoint(-65, -57, 2000,{.maxSpeed = 100} );
+    p_stick.set_value(true);
+    chassis.turnToHeading(90, 1000);
+    // put mogo in corner
+}
+void blueNegBase(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::RED);//check if auto_intake fucks stuff up
+    });
+    b_colorState = true;
+//defaults
+    chassis.setPose(53,9,114);
+    chassis.moveToPoint(59 , 5.8 , 1000);
+    
+//dunk
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    intakeSpin = true;
+    m_lift.move(-127);
+    
+//move to mogo
+    chassis.moveToPoint(22, 25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+    pros::delay(1200);
+    p_mogo.set_value(true);
+    pros::delay(100);
+    m_lift.brake();
+    // m_intake.move(127);
+    intakeSpin = true;
+    
+//move to first stack
+    chassis.turnToPoint(10.5, 38, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(10.5, 38, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(150);
+    
+//move back from first stack
+    leftMotors.move(-60);
+    rightMotors.move(-60);
+    pros::delay(250);
+    leftMotors.brake();
+    rightMotors.brake();
+//go to middle stack
+    chassis.turnToPoint(24, 48, 750, {.forwards = true,.maxSpeed=60,.minSpeed=0});
+    chassis.moveToPoint(24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+//move to last stack
+    chassis.turnToPoint(48, 0, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // pros::delay(450);
+    chassis.moveToPoint(48, 3.5, 2000, {.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});//get stack
+    chassis.waitUntil(15);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();        
+    p_intake.set_value(false);
+    pros::delay(200);
+    chassis.moveToPoint(48, 7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+    chassis.waitUntilDone();
+    pros::delay(500);
+}
+void blueNegQual(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::RED);//check if auto_intake fucks stuff up
+    });
+    b_colorState = true;
+    blueNegBase();
+    // go to ladder
+    m_lift.move(127);
+    chassis.moveToPoint(24, 24, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(12, 12, 1300, {.forwards = true,.maxSpeed=80,.minSpeed=0});
+    chassis.waitUntilDone();
+
+//move forward towards ladder
+    leftMotors.move(20);
+    rightMotors.move(20);
+    pros::delay(600);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+// void blueNegElim(){
+//     blueNegBase();
+//     //elim stuff
+// }
+void bluePosBase(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::RED);//check if auto_intake fucks stuff up
+    });
+    b_colorState = true;
+    chassis.setPose(54, -59, 90);
+    chassis.moveToPoint(26, -59, 1500, {.forwards =false,.minSpeed=10});
+    chassis.moveToPose(1.5, -48, 90, 2500, {.forwards = false, .lead = 0.35,  .minSpeed = 10} );
+    chassis.waitUntilDone();
+    pros::delay(50);
+
+    //Clamp middle mogo
+    p_mogo.set_value(true);
+    pros::delay(300);
+    // m_intake.move(120);
+    // m_intake.move(127); //intakeSpin= true;
+     intakeSpin = true;
+
+    //go to first stack
+    chassis.moveToPoint(26, -42, 2000,{.maxSpeed = 80});
+    pros::delay(800);
+
+    //throw middle mogo aside
+    chassis.turnToHeading(315, 2000, {.direction = AngularDirection:: CCW_COUNTERCLOCKWISE, .maxSpeed = 55});//{.direction = AngularDirection:: CCW_COUNTERCLOCKWISE}
+    chassis.waitUntilDone();
+
+    //unclamp middle mogo
+    p_mogo.set_value(false); 
+    pros::delay(200);
+    chassis.turnToPoint(24,-24, 2000);//face second mogo
+    //chassis.waitUntilDone(); Add this if you dont want bot to curve
+    chassis.moveToPoint(24, -24, 2000, {.forwards = false,.maxSpeed = 50}); 
+    chassis.waitUntilDone();
+    
+    //get second mogo
+    // chassis.waitUntilDone();
+    p_mogo.set_value(true); 
+    pros::delay(200);
+}
+void bluePosQual(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::RED);//check if auto_intake fucks stuff up
+    });
+    bluePosBase();
+    // Get Stack
+    chassis.turnToHeading(37, 2000, {.maxSpeed = 90});//turn to ALLIANCE STAKE RING STACK
+    p_intake.set_value(true);
+    chassis.moveToPoint(48, -2, 2000, {.maxSpeed = 55});
+    chassis.waitUntilDone();
+    p_intake.set_value(false);
+    pros::delay(300);
+    chassis.moveToPoint(46, -3, 2000, {.forwards = false, .maxSpeed = 50});
+    
+//Touch Ladder
+    // chassis.turnToPoint(-24, -24, 2000, {.forwards = false});
+    chassis.turnToHeading(270, 2000);
+    chassis.moveToPoint(31, -2, 2000, {.maxSpeed = 50});
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+}
+void bluePosElim(){
+    b_colorState = true;
+}
+void soloRed(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = false;
+//defaults
+    chassis.setPose(-53,9,-114);
+    chassis.moveToPoint(-59 , 5.8 , 1000);
+    
+//dunk
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    intakeSpin = true;
+    m_lift.move(-127);
+    
+//move to mogo
+    chassis.moveToPoint(-22, 25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+    pros::delay(1200);
+    p_mogo.set_value(true);
+    pros::delay(100);
+    m_lift.brake();
+    // m_intake.move(127);
+    intakeSpin = true;
+    
+//move to first stack
+    chassis.turnToPoint(-10.5, 38, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-10.5, 38, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(150);
+    
+//move back from first stack
+    leftMotors.move(-60);
+    rightMotors.move(-60);
+    pros::delay(250);
+    leftMotors.brake();
+    rightMotors.brake();
+//go to middle stack
+    chassis.turnToPoint(-24, 48, 750, {.forwards = true,.maxSpeed=60,.minSpeed=0});
+    chassis.moveToPoint(-24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+//move to last stack
+    chassis.turnToPoint(-48, 0, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // pros::delay(450);
+    chassis.moveToPoint(-48, 3.5, 2000, {.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});//get stack
+    chassis.waitUntil(15);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();        
+    p_intake.set_value(false);
+    pros::delay(200);
+    chassis.moveToPoint(-48, 7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+    chassis.waitUntilDone();
+    pros::delay(600);
+    
+    p_mogo.set_value(false);
+    pros::delay(20);
+
+//Ｇet secibd nibuke goal on otherside
+    chassis.turnToPoint(-24, -24, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});//get other side autonf
+    chassis.moveToPoint(-22, -26, 1800, {.forwards = false,.maxSpeed=79,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+
+    p_mogo.set_value(true);
+    pros::delay(120);
+    // m_intake.move(127);
+    intakeSpin = true;
+    m_lift.move(70);
+    
+//touch ladder
+    chassis.turnToPoint(-24, -50, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-24, -50, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(500);
+    
+    chassis.turnToPoint(-13, -24, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-13, -24, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+}
+void soloBlue(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::RED);//check if auto_intake fucks stuff up
+    });
+    b_colorState = true;
+//defaults
+    chassis.setPose(53,9,114);
+    chassis.moveToPoint(59 , 5.8 , 1000);
+    
+//dunk
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    intakeSpin = true;
+    m_lift.move(-127);
+    
+//move to mogo
+    chassis.moveToPoint(22, 25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+    pros::delay(1200);
+    p_mogo.set_value(true);
+    pros::delay(100);
+    m_lift.brake();
+    // m_intake.move(127);
+    intakeSpin = true;
+    
+//move to first stack
+    chassis.turnToPoint(10.5, 38, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(10.5, 38, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(150);
+    
+//move back from first stack
+    leftMotors.move(-60);
+    rightMotors.move(-60);
+    pros::delay(250);
+    leftMotors.brake();
+    rightMotors.brake();
+//go to middle stack
+    chassis.turnToPoint(24, 48, 750, {.forwards = true,.maxSpeed=60,.minSpeed=0});
+    chassis.moveToPoint(24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+//move to last stack
+    chassis.turnToPoint(48, 0, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // pros::delay(450);
+    chassis.moveToPoint(48, 3.5, 2000, {.forwards = true,.maxSpeed=88,.minSpeed = 10,.earlyExitRange=2});//get stack
+    chassis.waitUntil(15);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();        
+    p_intake.set_value(false);
+    pros::delay(200);
+    chassis.moveToPoint(48, 7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+    chassis.waitUntilDone();
+    pros::delay(350);
+
+    p_mogo.set_value(false);
+    pros::delay(20);
+
+    chassis.turnToPoint(24, -24, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(22, -26, 1800, {.forwards = false,.maxSpeed=79,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+
+    p_mogo.set_value(true);
+    pros::delay(120);
+    // m_intake.move(127);
+    intakeSpin = true;
+    m_lift.move(70);
+    
+    //touch ladder
+    chassis.turnToPoint(24, -50, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(24, -50, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(500);
+    
+    chassis.turnToPoint(13, -24, 350, {.forwards = true,.maxSpeed=127,.minSpeed=10});
+    chassis.moveToPoint(13, -24, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+}
+
+void safeRedNegQual(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = false;
+    chassis.setPose(-53,9,-114);//(-52, 8.5, -110);
+    chassis.moveToPoint(-59 , 5.8 , 1000);// (-58, 6.5 , 1000);//Alliane Stake
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    intakeSpin = true;
+    m_lift.move(-127);
+    
+//move to mogo
+    chassis.moveToPoint(-22, 25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+    pros::delay(1200);
+    p_mogo.set_value(true);
+    pros::delay(100);
+    m_lift.brake();
+    // m_intake.move(127);
+    intakeSpin = true;
+
+    // chassis.turnToPoint(-23,50,1000);
+    chassis.turnToPoint(-26, 48, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-26, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+    pros::delay(120);
+    // m_intake.move(120);
+    // chassis.moveToPoint(-23, 45 ,2000);
+    chassis.moveToPose(-6.5 ,50 ,90, 1700, {.horizontalDrift=5,.lead = 0.3,.maxSpeed=85,.minSpeed=30,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    leftMotors.move(-60);
+    rightMotors.move(-60);
+    pros::delay(450);
+    leftMotors.brake();
+    rightMotors.brake();
+    // chassis.moveToPoint(-20, 45 ,2000 ,{.forwards = false });//back
+    chassis.moveToPose(-7.5 ,41 ,90, 1700, {.horizontalDrift=8,.lead = 0.5,.maxSpeed=85,.minSpeed=30,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(350);
+    // chassis.turnToPoint(-10.5, 38, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+
+    // here
+    chassis.moveToPoint(-48, 24, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(-48, 0, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    p_intake.set_value(true);
+    chassis.moveToPoint(-48, 3.5, 1500, {.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});//get stack
+    chassis.waitUntil(15);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();        
+    p_intake.set_value(false);
+    pros::delay(200);
+    chassis.moveToPoint(-48, 7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+    chassis.waitUntilDone();
+    pros::delay(500);
+    // here^2
+    // // go to ladder
+
+    m_lift.move(127);
+    chassis.moveToPoint(-24, 24, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(-12, 12, 1300, {.forwards = true,.maxSpeed=80,.minSpeed=0});
+    chassis.waitUntilDone();
+
+//move forward towards ladder
+    leftMotors.move(20);
+    rightMotors.move(20);
+    pros::delay(600);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+
+void safeBlueNegQual(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::RED);//check if auto_intake fucks stuff up
+    });
+    b_colorState = true;
+    // front
+    chassis.setPose(53,9,114);//(-52, 8.5, -110);
+    chassis.moveToPoint(59 , 5.8 , 1000);// (-58, 6.5 , 1000);//Alliane Stake
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    intakeSpin = true;
+    m_lift.move(-127);
+    
+//move to mogo
+    chassis.moveToPoint(22, 25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+    pros::delay(1200);
+    p_mogo.set_value(true);
+    pros::delay(100);
+    m_lift.brake();
+    // m_intake.move(127);
+    intakeSpin = true;
+
+    // chassis.turnToPoint(-23,50,1000);
+    chassis.turnToPoint(26, 48, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(26, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+    pros::delay(135);
+    // m_intake.move(120);
+    // chassis.moveToPoint(-23, 45 ,2000);
+    chassis.moveToPose(6.5 ,50 ,270, 1700, {.horizontalDrift=5,.lead = 0.3,.maxSpeed=85,.minSpeed=30,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(100);
+    leftMotors.move(-60);
+    rightMotors.move(-60);
+    pros::delay(450);
+    leftMotors.brake();
+    rightMotors.brake();
+    // chassis.moveToPoint(-20, 45 ,2000 ,{.forwards = false });//back
+    chassis.moveToPose(7.5 ,41 ,270, 1700, {.horizontalDrift=8,.lead = 0.5,.maxSpeed=85,.minSpeed=30,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(400);
+    // chassis.turnToPoint(-10.5, 38, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(48, 24, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(48, 0, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    p_intake.set_value(true);
+    chassis.moveToPoint(48, 3.5, 1500, {.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});//get stack
+    chassis.waitUntil(15);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();        
+    p_intake.set_value(false);
+    pros::delay(200);
+    chassis.moveToPoint(48, 7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+    chassis.waitUntilDone();
+    pros::delay(550);
+
+    // go to ladder
+    m_lift.move(127);
+    chassis.moveToPoint(24, 24, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(12, 12, 1300, {.forwards = true,.maxSpeed=80,.minSpeed=0});
+    chassis.waitUntilDone();
+
+//move forward towards ladder
+    leftMotors.move(20);
+    rightMotors.move(20);
+    pros::delay(600);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+
+void blueNegElims(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::RED);
+    });
+    b_colorState = true;
+    // pros::Task tlbg([&]() {
+    // //used to be a while loop
+    //     lb_free(1200);
+    // });
+    // pros::Task tlbg(lb_general);
+    // pros::Task tlbg(lb_free);
+    // pros::Task tlbg2(fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk);
+    chassis.setPose(53,9,114);//(-52, 8.5, -110);
+    // chassis.moveToPoint(-59 , 5.8 , 1000);// (-58, 6.5 , 1000);//Alliane Stake
+    // fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    // intakeSpin = true;
+    // i_lbState=1;
+    // m_lift.move(35);
+    // lb_free(1200);
+    // i_lbState=2;
+    
+//move to mogo
+    chassis.moveToPoint(22, 25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+    pros::delay(1250);
+    // pros::delay(550);
+    p_mogo.set_value(true);
+    // m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    // m_lift.brake();
+    pros::delay(100);
+    m_lift.brake();
+    // intakeSpin=false;
+    
+
+    chassis.turnToPoint(11, 30, 325, {.forwards = true,.maxSpeed=127,.minSpeed=25});
+    chassis.waitUntilDone();
+    intakeSpin=true;
+    chassis.moveToPoint(11, 30, 600, {.forwards = true,.maxSpeed=127,.minSpeed = 30,.earlyExitRange=1});
+    // chassis.waitUntil(5);
+    chassis.waitUntilDone();
+    chassis.moveToPoint(10.5, 52, 1500, {.forwards = true,.maxSpeed=90,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(450);
+
+    // chassis.turnToPoint(24, 24, 750, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(24, 24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+    
+
+    // //move back from first stack
+    // leftMotors.move(-60);
+    // rightMotors.move(-60);
+    // pros::delay(250);
+    // leftMotors.brake();
+    // rightMotors.brake();
+// //go to middle stack
+//     chassis.turnToPoint(24, 48, 750, {.forwards = true,.maxSpeed=60,.minSpeed=0});
+//     chassis.moveToPoint(24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+//move to last stack
+    chassis.turnToPoint(48, 0, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // pros::delay(450);
+    chassis.moveToPoint(48, 3.5, 2000, {.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});//get stack
+    chassis.waitUntil(15);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();        
+    p_intake.set_value(false);
+    pros::delay(200);
+    chassis.moveToPoint(48, 7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+    chassis.waitUntilDone();
+    pros::delay(400);
+
+    // chassis.turnToPoint(24, 48, 350, {.forwards = true,.maxSpeed=75,.minSpeed=0});
+    chassis.moveToPoint(24, 24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+    lb_stage1(1200);
+
+    chassis.turnToPoint(24, 48, 350, {.forwards = true,.maxSpeed=75,.minSpeed=0});
+    chassis.moveToPoint(24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+    pros::delay(200);
+
+    // intakeSpin = false;
+
+    // chassis.turnToPoint(9.5, 62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.moveToPoint(9.5, 62.5, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(12.5, 59.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(12.5, 59.5, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(250);
+    // chassis.turnToPoint(0, 69, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.turnToHeading(245,350);
+    chassis.turnToHeading(317,1200);
+    chassis.waitUntilDone();
+    leftMotors.move(27);
+    rightMotors.move(27);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+    intakeSpin=false;
+    m_lift.move(127);
+    pros::delay(800);
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+
+void redNegElims(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);
+    });
+    b_colorState = false;
+    // pros::Task tlbg([&]() {
+    // //used to be a while loop
+    //     lb_free(1200);
+    // });
+    // pros::Task tlbg(lb_general);
+    // pros::Task tlbg(lb_free);
+    // pros::Task tlbg2(fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk);
+    chassis.setPose(-53,9,-114);//(-52, 8.5, -110);
+    // chassis.moveToPoint(-59 , 5.8 , 1000);// (-58, 6.5 , 1000);//Alliane Stake
+    // fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    // intakeSpin = true;
+    // i_lbState=1;
+    // m_lift.move(35);
+    // lb_free(1200);
+    // i_lbState=2;
+    
+//move to mogo
+    chassis.moveToPoint(-22, 25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+    pros::delay(1250);
+    // pros::delay(550);
+    p_mogo.set_value(true);
+    // m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    // m_lift.brake();
+    pros::delay(100);
+    m_lift.brake();
+    // intakeSpin=false;
+    
+
+    chassis.turnToPoint(-10, 30, 325, {.forwards = true,.maxSpeed=127,.minSpeed=25});
+    chassis.waitUntilDone();
+    intakeSpin=true;
+    chassis.moveToPoint(-10, 30, 600, {.forwards = true,.maxSpeed=127,.minSpeed = 30,.earlyExitRange=1});
+    // chassis.waitUntil(5);
+    chassis.waitUntilDone();
+    chassis.moveToPoint(-9.5, 53.5, 1500, {.forwards = true,.maxSpeed=90,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(450);
+
+    // chassis.turnToPoint(24, 24, 750, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-24, 24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+    
+
+    // //move back from first stack
+    // leftMotors.move(-60);
+    // rightMotors.move(-60);
+    // pros::delay(250);
+    // leftMotors.brake();
+    // rightMotors.brake();
+// //go to middle stack
+//     chassis.turnToPoint(24, 48, 750, {.forwards = true,.maxSpeed=60,.minSpeed=0});
+//     chassis.moveToPoint(24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+//move to last stack
+    chassis.turnToPoint(-48, 0, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // pros::delay(450);
+    chassis.moveToPoint(-48, 3.5, 2000, {.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});//get stack
+    chassis.waitUntil(15);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();
+    p_intake.set_value(false);
+    pros::delay(200);
+    chassis.moveToPoint(-48, 7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+    chassis.waitUntilDone();
+    pros::delay(400);
+
+    // chassis.turnToPoint(24, 48, 350, {.forwards = true,.maxSpeed=75,.minSpeed=0});
+    chassis.moveToPoint(-24, 24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+    lb_stage1(1200);
+
+    chassis.turnToPoint(-24, 48, 350, {.forwards = true,.maxSpeed=75,.minSpeed=0});
+    chassis.moveToPoint(-24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+    pros::delay(300);
+
+    // intakeSpin = false;
+
+    // chassis.turnToPoint(9.5, 62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.moveToPoint(9.5, 62.5, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(-12.5, 59.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-12.5, 59.5, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(250);
+    // chassis.turnToPoint(0, 69, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.turnToHeading(115,350);
+    chassis.turnToHeading(43,1200);
+    chassis.waitUntilDone();
+    leftMotors.move(27);
+    rightMotors.move(27);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+    intakeSpin=false;
+    m_lift.move(127);
+    pros::delay(800);
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+// void blueNegElimsV2(){
+//     pros::Task task_autoIntake([&]() {
+//     //used to be a while loop
+//         auto_intake(colorVals::RED);
+//     });
+//     // pros::Task tlbg([&]() {
+//     // //used to be a while loop
+//     //     lb_free(1200);
+//     // });
+//     // pros::Task tlbg(lb_general);
+//     // pros::Task tlbg(lb_free);
+//     // pros::Task tlbg2(fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk);
+//     chassis.setPose(53,9,114);//(-52, 8.5, -110);
+//     // chassis.moveToPoint(-59 , 5.8 , 1000);// (-58, 6.5 , 1000);//Alliane Stake
+//     // fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+//     // intakeSpin = true;
+//     // i_lbState=1;
+//     // m_lift.move(35);
+//     // lb_free(1200);
+//     // i_lbState=2;
+    
+// //move to mogo
+//     chassis.moveToPoint(22, 25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+//     pros::delay(1250);
+//     // pros::delay(550);
+//     p_mogo.set_value(true);
+//     // m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+//     // m_lift.brake();
+//     pros::delay(100);
+//     m_lift.brake();
+//     // intakeSpin=false;
+    
+
+//     chassis.turnToPoint(11, 30, 325, {.forwards = true,.maxSpeed=127,.minSpeed=25});
+//     chassis.waitUntilDone();
+//     intakeSpin=true;
+//     chassis.moveToPoint(11, 30, 600, {.forwards = true,.maxSpeed=127,.minSpeed = 30,.earlyExitRange=1});
+//     // chassis.waitUntil(5);
+//     chassis.waitUntilDone();
+//     chassis.moveToPoint(10.5, 49, 1400, {.forwards = true,.maxSpeed=90,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.waitUntilDone();
+//     pros::delay(400);
+
+//     // chassis.turnToPoint(24, 24, 750, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(24, 24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+    
+
+//     // //move back from first stack
+//     // leftMotors.move(-60);
+//     // rightMotors.move(-60);
+//     // pros::delay(250);
+//     // leftMotors.brake();
+//     // rightMotors.brake();
+// // //go to middle stack
+// //     chassis.turnToPoint(24, 48, 750, {.forwards = true,.maxSpeed=60,.minSpeed=0});
+// //     chassis.moveToPoint(24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+// //move to last stack
+//     chassis.turnToPoint(48, 0, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     // pros::delay(450);
+//     chassis.moveToPoint(48, 3.5, 2000, {.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});//get stack
+//     chassis.waitUntil(15);
+//     p_intake.set_value(true);
+//     chassis.waitUntilDone();        
+//     p_intake.set_value(false);
+//     pros::delay(200);
+//     chassis.moveToPoint(48, 7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+//     chassis.waitUntilDone();
+//     pros::delay(400);
+
+//     // chassis.turnToPoint(24, 48, 350, {.forwards = true,.maxSpeed=75,.minSpeed=0});
+//     chassis.moveToPoint(24, 24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+//     lb_stage1(1200);
+
+//     chassis.turnToPoint(24, 48, 350, {.forwards = true,.maxSpeed=75,.minSpeed=0});
+//     chassis.moveToPoint(24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+//     pros::delay(200);
+
+//     // intakeSpin = false;
+
+//     // chassis.turnToPoint(9.5, 62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     // chassis.moveToPoint(9.5, 62.5, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.turnToPoint(10.5, 61.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(10.5, 61.5, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.waitUntilDone();
+//     pros::delay(300);
+//     // chassis.turnToPoint(0, 69, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.turnToHeading(240,350);
+//     chassis.turnToHeading(317,1200);
+//     chassis.waitUntilDone();
+//     leftMotors.move(20);
+//     rightMotors.move(20);
+//     // pros::delay(300);
+//     // chassis.waitUntilDone();
+//     pros::delay(350);
+//     leftMotors.brake();
+//     rightMotors.brake();
+//     intakeSpin=false;
+//     m_lift.move(127);
+//     pros::delay(800);
+// }
+
+// For Skills
+const double Y_DRIFT_VAL = 4.0;
+const double X_DRIFT_VAL = -2.0; 
+
+void skills(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = false;
+    //defaults :))
+    chassis.setPose(-61,0,90);
+    // m_intake.move(127);
+     intakeSpin = true;
+    pros::delay(650);
+
+    chassis.moveToPoint(-48, 0, 2000,{.forwards = true,.maxSpeed=100,.minSpeed = 5,.earlyExitRange=1});
+    chassis.turnToPoint(-48, 26, 2000, {.forwards = false,.minSpeed = 5,.earlyExitRange=1}); // face with back of bot
+    chassis.moveToPoint(-48, 26, 2500,{.forwards = false,.maxSpeed=50,.minSpeed = 5,.earlyExitRange=2});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(400);
+    chassis.turnToPoint(-24, 24, 2500, {.forwards = true,.maxSpeed=100,.minSpeed = 5,.earlyExitRange=1});
+    chassis.moveToPoint(-24, 24, 2000,{.forwards = true,.maxSpeed=100,.minSpeed = 0,.earlyExitRange=1});
+    chassis.turnToPoint(1, 56.5, 2500, {.forwards = true,.maxSpeed=100,.minSpeed = 5,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(400);
+    lb_stage1(1200);//Lift ladybrown up
+    chassis.moveToPoint(1, 56.5, 2000,{.forwards = true,.maxSpeed=90,.minSpeed = 0,.earlyExitRange=1});//Drive to stake
+    
+    chassis.turnToHeading(0, 2000);
+    chassis.waitUntilDone();
+    leftMotors.move(30);
+    rightMotors.move(30);
+    pros::delay(1250);
+    intakeSpin = false;
+    leftMotors.brake();
+    rightMotors.brake();
+    m_intake.brake();
+    m_lift.move(127);
+    pros::delay(950);
+    chassis.moveToPoint(0, 48, 2000,{.forwards = false,.maxSpeed=75,.minSpeed = 0,.earlyExitRange=1}); // move back
+    m_lift.move(-127);
+    intakeSpin = true;
+    // m_intake.move(127);
+     intakeSpin = true;
+    chassis.turnToPoint(-60, 48, 1200, {.forwards = true});
+    chassis.moveToPoint(-36, 48, 2000,{.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});
+    
+    chassis.moveToPoint(-60, 48, 2000,{.forwards = true,.maxSpeed=60,.minSpeed = 10,.earlyExitRange=1});
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+    chassis.turnToPoint(-48, 60, 1200, {.forwards = true,.maxSpeed=55,.minSpeed=0});
+    chassis.moveToPoint(-48, 60, 2500,{.forwards = true,.maxSpeed=65,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(200);
+    chassis.turnToPoint(-64, 64, 1200, {.forwards = false,.minSpeed=50}); // back of bot
+    chassis.waitUntilDone();
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    pros::delay(450);
+    leftMotors.brake();
+    rightMotors.brake();
+    p_mogo.set_value(false);
+
+    // 2/4
+    chassis.turnToPoint(-45, 48, 2000, {.forwards = true,.maxSpeed=90,.minSpeed=0});
+    chassis.moveToPoint(-45, 48, 2500,{.forwards = true,.maxSpeed=85,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(-45, -25+Y_DRIFT_VAL, 2000, {.forwards = false,.minSpeed = 5,.earlyExitRange=1}); // face with back of bot
+    chassis.moveToPoint(-45, 0+Y_DRIFT_VAL, 2500,{.forwards = false,.maxSpeed=100,.minSpeed = 5,.earlyExitRange=2});
+    chassis.turnToPoint(-45, -26+Y_DRIFT_VAL, 2000, {.forwards = false,.minSpeed = 5,.earlyExitRange=1}); // face with back of bot
+    chassis.moveToPoint(-45, -26+Y_DRIFT_VAL, 2500,{.forwards = false,.maxSpeed=50,.minSpeed = 5,.earlyExitRange=2});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(400);
+    chassis.turnToPoint(-24, -24+Y_DRIFT_VAL, 2500, {.forwards = true,.maxSpeed=100,.minSpeed = 5,.earlyExitRange=1});
+    chassis.moveToPoint(-24, -24+Y_DRIFT_VAL, 2000,{.forwards = true,.maxSpeed=100,.minSpeed = 0,.earlyExitRange=1});
+    chassis.turnToPoint(1, -55+Y_DRIFT_VAL, 2500, {.forwards = true,.maxSpeed=100,.minSpeed = 5,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(420);
+    lb_stage1(1200);
+    chassis.moveToPoint(1, -55+Y_DRIFT_VAL, 2000,{.forwards = true,.maxSpeed=90,.minSpeed = 0,.earlyExitRange=1});
+    chassis.turnToHeading(180, 2000);
+    chassis.waitUntilDone();
+    leftMotors.move(30);
+    rightMotors.move(30);
+    pros::delay(900);
+    leftMotors.brake();
+    rightMotors.brake();
+    m_intake.brake();
+    intakeSpin = false;
+    
+    
+    //Ladybrown
+    m_lift.move(127);
+    pros::delay(950);
+    chassis.moveToPoint(0, -48+Y_DRIFT_VAL, 2000,{.forwards = false,.maxSpeed=75,.minSpeed = 0,.earlyExitRange=1}); // move back
+    chassis.waitUntilDone();
+    m_lift.move(-127);
+    // m_intake.move(127);
+     intakeSpin = true;
+   
+    chassis.turnToPoint(-60, -48+Y_DRIFT_VAL, 1500, {.forwards = true});
+    chassis.moveToPoint(-36, -48+Y_DRIFT_VAL, 2000,{.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});
+    // chassis.turnToPoint(-60, -48, 2000, {.forwards = true});
+    chassis.moveToPoint(-60, -48+Y_DRIFT_VAL, 2000,{.forwards = true,.maxSpeed=60,.minSpeed = 10,.earlyExitRange=1});
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+    // pros::delay(250);
+    chassis.turnToPoint(-48, -60+Y_DRIFT_VAL, 1550, {.forwards = true,.maxSpeed=60,.minSpeed=0});
+    chassis.moveToPoint(-48, -60+Y_DRIFT_VAL, 2500,{.forwards = true,.maxSpeed=65,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(200);
+    chassis.turnToPoint(-64, -64+Y_DRIFT_VAL, 1500, {.forwards = false,.minSpeed=10}); // back of bot
+    chassis.waitUntilDone();
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    pros::delay(550);
+    leftMotors.brake();
+    rightMotors.brake();
+    p_mogo.set_value(false);
+
+    // 3/4
+    chassis.turnToPoint(24, -48+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(24, -48+Y_DRIFT_VAL, 3500, {.forwards = true,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(300);
+    // m_intake.brake();
+    intakeSpin = false;
+
+    chassis.turnToPoint(60+X_DRIFT_VAL, -21+Y_DRIFT_VAL, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(60+X_DRIFT_VAL, -21+Y_DRIFT_VAL, 3500, {.forwards = false,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(200);
+
+    chassis.turnToPoint(64, -64+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.waitUntilDone();
+    leftMotors.move(55);
+    rightMotors.move(55);
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+    p_stick.set_value(true);
+    pros::delay(20);
+
+    // chassis.turnToPoint(70, -68+Y_DRIFT_VAL, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+    chassis.turnToHeading(342,1100,{.maxSpeed=100});
+    pros::delay(300);
+    p_stick.set_value(false);
+    chassis.waitUntilDone();
+    pros::delay(50);
+    
+    leftMotors.move(-80);
+    rightMotors.move(-80);
+    pros::delay(520);
+    leftMotors.brake();
+    rightMotors.brake();
+    p_mogo.set_value(false);
+    pros::delay(100);
+    chassis.turnToPoint(48, -24+Y_DRIFT_VAL, 2000, {.forwards = true,.maxSpeed=90,.minSpeed=0});
+    chassis.moveToPoint(48, -24+Y_DRIFT_VAL, 3500, {.forwards = true,.maxSpeed=90,.minSpeed = 0,.earlyExitRange=1});
+    chassis.turnToPoint(48, 0+Y_DRIFT_VAL, 1200, {.forwards = false,.maxSpeed=90,.minSpeed=0});
+    chassis.moveToPoint(48, 0+Y_DRIFT_VAL, 2500, {.forwards = false,.maxSpeed=70,.minSpeed = 10,.earlyExitRange=2});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(200);
+    // m_intake.move(127);
+     intakeSpin = true;
+
+    chassis.turnToPoint(24, -24, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(24, -24, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    
+    chassis.turnToPoint(0, -0, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(0, -0, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+
+    chassis.turnToPoint(24+X_DRIFT_VAL, 24+Y_DRIFT_VAL, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(24+X_DRIFT_VAL, 24+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(24+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(24+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(51+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 1150, {.forwards = true,.maxSpeed=65,.minSpeed=0});
+    chassis.moveToPoint(51+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
+    pros::delay(50);
+    
+    // chassis.turnToPoint(70+X_DRIFT_VAL, 70+Y_DRIFT_VAL, 1200, {.forwards = false,.minSpeed=50}); // back of bot
+    chassis.turnToHeading(202.5,1200,{.minSpeed=50});
+    chassis.waitUntilDone();
+    leftMotors.move(-65);
+    rightMotors.move(-65);
+    // chassis.tank(-50,-50);
+    pros::delay(550);
+    leftMotors.brake();
+    rightMotors.brake();
+    p_mogo.set_value(false);
+
+    leftMotors.move(50);
+    rightMotors.move(50);
+    pros::delay(500);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+
+
+// // I swear if someone changes the wrong code ://
+// void skillsV2(){
+//     //defaults :))
+//     chassis.setPose(-61,0,90);
+//     // m_intake.move(127);
+//      intakeSpin = true;
+//     pros::delay(650);
+
+//     chassis.moveToPoint(-48, 0, 2000,{.forwards = true,.maxSpeed=100,.minSpeed = 5,.earlyExitRange=1});
+//     chassis.turnToPoint(-48, 26, 2000, {.forwards = false,.minSpeed = 5,.earlyExitRange=1}); // face with back of bot
+//     chassis.moveToPoint(-48, 26, 2500,{.forwards = false,.maxSpeed=50,.minSpeed = 5,.earlyExitRange=2});
+//     chassis.waitUntilDone();
+//     p_mogo.set_value(true);
+//     pros::delay(400);
+//     chassis.turnToPoint(-24, 24, 2500, {.forwards = true,.maxSpeed=100,.minSpeed = 5,.earlyExitRange=1});
+//     chassis.moveToPoint(-24, 24, 2000,{.forwards = true,.maxSpeed=100,.minSpeed = 0,.earlyExitRange=1});
+//     chassis.turnToPoint(0, 56, 2500, {.forwards = true,.maxSpeed=100,.minSpeed = 5,.earlyExitRange=1});
+//     chassis.waitUntilDone();
+//     pros::delay(400);
+//     lb_stage1(1200);//Lift ladybrown up. Make lb a task later
+
+//     chassis.moveToPoint(24, 48, 2000,{.forwards = true,.maxSpeed=90,.minSpeed = 0,.earlyExitRange=1});//Drive to stake
+//     pros::delay(200);
+//     chassis.moveToPoint(0, 48, 2000,{.forwards = false,.maxSpeed=90,.minSpeed = 0,.earlyExitRange=1});//Drive to stake
+//     // chassis.moveToPoint(2, 57, 2000,{.forwards = true,.maxSpeed=90,.minSpeed = 0,.earlyExitRange=1});//Drive to stake
+    
+//     chassis.turnToHeading(0, 2000);
+//     chassis.waitUntilDone();
+//     intakeSpin = false;
+//     lb_free(1200);
+//     // lb intake free spinning stage 2
+//     leftMotors.move(30);
+//     rightMotors.move(30);
+//     pros::delay(700);
+//     intakeSpin = true;
+//     leftMotors.brake();
+//     rightMotors.brake();
+//     m_intake.brake();
+//     m_lift.move(127);
+//     pros::delay(800);
+//     chassis.moveToPoint(0, 48, 2000,{.forwards = false,.maxSpeed=75,.minSpeed = 0,.earlyExitRange=1}); // move back
+//     m_lift.move(-127);
+//     intakeSpin = true;
+//     // m_intake.move(127);
+//     //  intakeSpin = true;
+//     chassis.turnToPoint(-60, 48, 1200, {.forwards = true});
+//     chassis.moveToPoint(-36, 48, 2000,{.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});
+    
+//     chassis.moveToPoint(-60, 48, 2000,{.forwards = true,.maxSpeed=60,.minSpeed = 10,.earlyExitRange=1});
+//     m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+//     m_lift.brake();
+//     chassis.turnToPoint(-48, 60, 1200, {.forwards = true,.maxSpeed=55,.minSpeed=0});
+//     chassis.moveToPoint(-48, 60, 2500,{.forwards = true,.maxSpeed=65,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.waitUntilDone();
+//     pros::delay(200);
+//     chassis.turnToPoint(-64, 64, 1200, {.forwards = false,.minSpeed=50}); // back of bot
+//     chassis.waitUntilDone();
+//     leftMotors.move(-50);
+//     rightMotors.move(-50);
+//     pros::delay(450);
+//     leftMotors.brake();
+//     rightMotors.brake();
+//     p_mogo.set_value(false);
+
+//     // New 2/4 
+//     chassis.turnToPoint(48, 48, 1200, {.forwards = true,.maxSpeed=55,.minSpeed=0});
+//     chassis.moveToPoint(48, 48, 2500,{.forwards = true,.maxSpeed=65,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.waitUntilDone();
+//     pros::delay(300);
+//     // m_intake.brake();
+//     intakeSpin = false;
+
+//     chassis.turnToPoint(60+X_DRIFT_VAL, 21+Y_DRIFT_VAL, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(60+X_DRIFT_VAL, 21+Y_DRIFT_VAL, 3500, {.forwards = false,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.waitUntilDone();
+//     p_mogo.set_value(true);
+//     pros::delay(200);
+    
+//     chassis.turnToHeading(0,900,{.maxSpeed=127});
+
+//     // chassis.turnToPoint(64, 64+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.waitUntilDone();
+//     leftMotors.move(55);
+//     rightMotors.move(55);
+//     pros::delay(400);
+//     leftMotors.brake();
+//     rightMotors.brake();
+//     p_stick.set_value(true);
+//     pros::delay(20);
+
+//     // chassis.turnToPoint(70, -68+Y_DRIFT_VAL, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+//     chassis.turnToHeading(198,1100,{.maxSpeed=100});
+//     pros::delay(300);
+//     p_stick.set_value(false);
+//     chassis.waitUntilDone();
+//     pros::delay(50);
+    
+//     leftMotors.move(-80);
+//     rightMotors.move(-80);
+//     pros::delay(520);
+//     leftMotors.brake();
+//     rightMotors.brake();
+//     p_mogo.set_value(false);
+//     pros::delay(100);
+//     chassis.turnToPoint(48, 24+Y_DRIFT_VAL, 2000, {.forwards = true,.maxSpeed=90,.minSpeed=0});
+//     chassis.moveToPoint(48, 24+Y_DRIFT_VAL, 3500, {.forwards = true,.maxSpeed=90,.minSpeed = 0,.earlyExitRange=1});
+//     chassis.turnToPoint(48, 0+Y_DRIFT_VAL, 1200, {.forwards = false,.maxSpeed=90,.minSpeed=0});
+//     chassis.moveToPoint(48, 0+Y_DRIFT_VAL, 2500, {.forwards = false,.maxSpeed=90,.minSpeed = 10,.earlyExitRange=2});
+//     chassis.waitUntilDone();
+
+//     chassis.turnToHeading(270,1200,{.maxSpeed=127});
+//     chassis.waitUntilDone();
+//     waitUntilWall();
+//     intakeSpin = true;
+//     pros::delay(1000);
+
+//     chassis.turnToPoint(48, -12+Y_DRIFT_VAL, 1200, {.forwards = false,.maxSpeed=90,.minSpeed=0});
+//     chassis.moveToPoint(48, -12+Y_DRIFT_VAL, 2500, {.forwards = false,.maxSpeed=70,.minSpeed = 10,.earlyExitRange=2});
+//     chassis.waitUntilDone();
+//     p_mogo.set_value(true);
+//     pros::delay(200);
+//     // m_intake.move(127);
+//      intakeSpin = true;
+
+//     chassis.turnToPoint(24, 24, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(24, 24, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    
+//     chassis.turnToPoint(0, 0, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(0, 0, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+
+//     chassis.turnToPoint(-24+X_DRIFT_VAL, -24+Y_DRIFT_VAL, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(-24+X_DRIFT_VAL, -24+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.turnToPoint(-48+X_DRIFT_VAL, -48+Y_DRIFT_VAL, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(-48+X_DRIFT_VAL, -48+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.turnToPoint(-48+X_DRIFT_VAL, -60+Y_DRIFT_VAL, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(-48+X_DRIFT_VAL, -60+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.turnToPoint(-60+X_DRIFT_VAL, -48+Y_DRIFT_VAL, 1150, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(-60+X_DRIFT_VAL, -48+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.waitUntilDone();
+//     pros::delay(200);
+//     chassis.turnToPoint(-64, -64+Y_DRIFT_VAL, 1500, {.forwards = false,.minSpeed=10}); // back of bot
+//     chassis.waitUntilDone();
+//     leftMotors.move(-50);
+//     rightMotors.move(-50);
+//     pros::delay(550);
+//     leftMotors.brake();
+//     rightMotors.brake();
+//     p_mogo.set_value(false);
+//     pros::delay(50);
+
+//     // New 3/4
+//     lb_stage1(1200); // make this task later
+//     chassis.turnToPoint(-24, -48+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(-24, -48+Y_DRIFT_VAL, 2000, {.forwards = true,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
+
+
+//     // chassis.turnToPoint(-48, -48+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     // chassis.moveToPoint(-48, -48+Y_DRIFT_VAL, 2000, {.forwards = true,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
+//     // chassis.waitUntilDone();
+//     // pros::delay(300);
+//     // // m_intake.brake();
+//     // intakeSpin = false;
+//     chassis.turnToPoint(-48, -24+Y_DRIFT_VAL, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(-49, -22+Y_DRIFT_VAL, 2000, {.forwards = false,.maxSpeed=70,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.waitUntilDone();
+//     p_mogo.set_value(true);
+//     pros::delay(50);
+//     // lb_stage1(); // make this task later
+    
+
+//     chassis.turnToPoint(0, -48+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(0, -48+Y_DRIFT_VAL, 2000, {.forwards = true,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
+//     lb_free(1200);
+//     // lb intake free spin
+
+//     chassis.turnToHeading(180, 2000);
+//     chassis.waitUntilDone();
+//     leftMotors.move(30);
+//     rightMotors.move(30);
+//     pros::delay(600);
+//     leftMotors.brake();
+//     rightMotors.brake();
+//     m_intake.brake();
+//     // intakeSpin = false;
+    
+//     //Ladybrown
+//     m_lift.move(127);
+//     pros::delay(950);
+//     chassis.moveToPoint(0, -48+Y_DRIFT_VAL, 2000,{.forwards = false,.maxSpeed=75,.minSpeed = 0,.earlyExitRange=1}); // move back
+//     chassis.waitUntilDone();
+//     m_lift.move(-127);
+
+//     chassis.turnToPoint(24, -48+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(24, -48+Y_DRIFT_VAL, 2000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.turnToPoint(24, -24+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(24, -24+Y_DRIFT_VAL, 2000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.turnToPoint(48, -48+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(48, -48+Y_DRIFT_VAL, 2000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.turnToPoint(48, -60+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(48, -60+Y_DRIFT_VAL, 2000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     chassis.turnToPoint(60, -48+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+//     chassis.moveToPoint(60, -48+Y_DRIFT_VAL, 2000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+//     pros::delay(50);
+    
+//     // chassis.turnToPoint(64, 64+Y_DRIFT_VAL, 1200, {.forwards = false,.minSpeed=50}); // back of bot
+//     chassis.turnToHeading(342,1200,{.minSpeed=50});
+//     chassis.waitUntilDone();
+//     leftMotors.move(-60);
+//     rightMotors.move(-60);
+//     // chassis.tank(-50,-50);
+//     pros::delay(500);
+//     leftMotors.brake();
+//     rightMotors.brake();
+//     p_mogo.set_value(false);
+
+//     leftMotors.move(50);
+//     rightMotors.move(50);
+//     pros::delay(500);
+//     leftMotors.brake();
+//     rightMotors.brake();
+// }
+
+void goForwardAuton(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    leftMotors.move(50);
+    rightMotors.move(50);
+    pros::delay(1000);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+
+void intakeCorner(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    // m_intake.move(127);
+    intakeSpin = true;
+    leftMotors.move(60);
+    rightMotors.move(60);
+    pros::delay(1300);
+    // leftMotors.brake();
+    // rightMotors.brake();
+    leftMotors.move(-30);
+    rightMotors.move(-30);
+    pros::delay(450);
+    // leftMotors.brake();
+    // rightMotors.brake();
+    p_intake.set_value(true);
+    leftMotors.move(70);
+    rightMotors.move(70);
+    pros::delay(200);
+    p_intake.set_value(false);
+    pros::delay(700);
+    leftMotors.move(-55);
+    rightMotors.move(-55);
+    pros::delay(300);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+
+void blueMogoside(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = true;
+    chassis.setPose(54, -58, 90);
+    chassis.moveToPoint(3, -48, 2000,{.forwards = false , .minSpeed = 20});//Mobile Goal
+    p_mogo.set_value(true);
+    pros::delay(100);
+
+    intakeSpin = true;
+    chassis.moveToPoint(24, -48, 2000);
+    lb_stage1(1200);
+    pros::delay(400);
+    intakeSpin = false;
+    // m_intake.brake();
+
+    chassis.turnToPoint(7, -64.5, 2000, {.maxSpeed = 80});
+    chassis.moveToPoint(7, -64.5, 2000);
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    lb_reset();
+    intakeSpin = true;
+
+    //go for nonmiddle mogo
+    chassis.turnToHeading(180, 2000, {.earlyExitRange = 1});
+    chassis.moveToPose(24, -24, 90, 2000, {.forwards = false , .lead = 0.35});//Mobile Goal
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    p_intake.set_value(true);
+    
+    chassis.turnToPoint(47, 0, 2000, {.earlyExitRange = 1});
+    chassis.moveToPoint(47, 0, 2000, {.maxSpeed = 80});
+    chassis.waitUntilDone();
+    p_intake.set_value(false);
+
+    chassis.moveToPoint(40, -5.5, 2000, {.maxSpeed = 60});
+}
+
+void redMogoSide(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = false;
+    chassis.setPose(-54, -58, 270);
+    chassis.moveToPose(-3, -48, 232, 2000, {.forwards = false , .minSpeed = 20});//Mobile Goal
+    p_mogo.set_value(true);
+    pros::delay(100);
+
+    intakeSpin = true;
+    chassis.moveToPoint(-24, -48, 2000);
+    lb_stage1(1200);
+    pros::delay(400);
+    // m_intake.brake();
+    intakeSpin = false;
+
+    chassis.turnToPoint(-7, -64.5, 2000, {.maxSpeed = 80});
+    chassis.moveToPoint(-7, -64.5, 2000);
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    lb_reset();
+    intakeSpin = true;
+
+    //go for nonmiddle mogo
+    chassis.turnToHeading(0, 2000, {.earlyExitRange = 1});
+    chassis.moveToPose(-24, -24, 90, 2000, {.forwards = false , .lead = 0.35});//Mobile Goal
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    p_intake.set_value(true);
+    
+    chassis.turnToPoint(-47, 0, 2000, {.earlyExitRange = 1});
+    chassis.moveToPoint(-47, 0, 2000, {.maxSpeed = 80});
+    chassis.waitUntilDone();
+    p_intake.set_value(false);
+
+    chassis.moveToPoint(-40, -5.5, 2000, {.maxSpeed = 60});
+}
+
+void opp(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    // pros::Task task_autoIntake([&]() {
+    // //used to be a while loop
+    //     auto_intake(colorVals::RED);//check if auto_intake fucks stuff up
+    // });
+//defaults
+    chassis.setPose(53,9,114);
+    chassis.moveToPoint(59 , 5.8 , 1000);
+    
+//dunk
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    intakeSpin = true;
+    m_lift.move(-127);
+    
+//move to mogo
+    chassis.moveToPoint(22, 25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+    pros::delay(1200);
+    p_mogo.set_value(true);
+    pros::delay(100);
+    m_lift.brake();
+    // intakeSpin = true;
+    intakeSpin = true;
+    
+//move to first stack
+    chassis.turnToPoint(10.5, 38, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(10.5, 38, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(150);
+
+    chassis.moveToPoint(24, 24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+    
+
+    // //move back from first stack
+    // leftMotors.move(-60);
+    // rightMotors.move(-60);
+    // pros::delay(250);
+    // leftMotors.brake();
+    // rightMotors.brake();
+// //go to middle stack
+//     chassis.turnToPoint(24, 48, 750, {.forwards = true,.maxSpeed=60,.minSpeed=0});
+//     chassis.moveToPoint(24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+//move to last stack
+    chassis.turnToPoint(46, 0, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // pros::delay(450);
+    chassis.moveToPoint(46, 3.5, 2000, {.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});//get stack
+    chassis.waitUntil(15);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();        
+    p_intake.set_value(false);
+    pros::delay(200);
+    chassis.moveToPoint(48, 7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+    chassis.waitUntilDone();
+    pros::delay(450);
+
+    // chassis.turnToPoint(24, 48, 350, {.forwards = true,.maxSpeed=75,.minSpeed=0});
+    chassis.moveToPoint(24, 24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+    lb_stage1(1200);
+
+    chassis.turnToPoint(24, 48, 350, {.forwards = true,.maxSpeed=75,.minSpeed=0});
+    chassis.moveToPoint(24, 48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+    pros::delay(200);
+
+    // m_intake.brake();
+
+    // chassis.turnToPoint(9.5, 62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.moveToPoint(9.5, 62.5, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(12, 59.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(12, 59.5, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(250);
+    // chassis.turnToPoint(0, 69, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.turnToHeading(245,350);
+    chassis.turnToHeading(317,1200);
+    chassis.waitUntilDone();
+    leftMotors.move(30);
+    rightMotors.move(30);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+    // m_intake.brake();
+    intakeSpin = false;
+    // intakeSpin=false;
+    m_lift.move(127);
+    pros::delay(800);
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+
+void oppV2(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    // pros::Task task_autoIntake([&]() {
+    // //used to be a while loop
+    //     auto_intake(colorVals::RED);//check if auto_intake fucks stuff up
+    // });
+//defaults
+    chassis.setPose(53,-9,66);
+    chassis.moveToPoint(59 , -5.8 , 1000);
+    
+//dunk
+    fivefourtydegreeoveraarongordonfreethrowlinewindmilldoubleclutchoffthebackboarddunk();
+    intakeSpin = true;
+    m_lift.move(-127);
+    
+//move to mogo
+    chassis.moveToPoint(22, -25, 2000,{.forwards = false , .maxSpeed = 75});//Mobile Goal
+    pros::delay(1200);
+    p_mogo.set_value(true);
+    pros::delay(100);
+    m_lift.brake();
+    // intakeSpin = true;
+    intakeSpin = true;
+    
+    //move to last stack
+    chassis.turnToPoint(46, 0, 200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // pros::delay(450);
+    chassis.moveToPoint(46, -3.5, 2000, {.forwards = true,.maxSpeed=80,.minSpeed = 10,.earlyExitRange=1});//get stack
+    chassis.waitUntil(15);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();        
+    p_intake.set_value(false);
+    pros::delay(200);
+    chassis.moveToPoint(48, -7, 1500, {.forwards =false, .maxSpeed = 65});//move backfrom alliance ring stack
+    chassis.waitUntilDone();
+    pros::delay(450);
+
+    // chassis.turnToPoint(24, 48, 350, {.forwards = true,.maxSpeed=75,.minSpeed=0});
+    chassis.moveToPoint(24, -24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+    lb_stage1(1200);
+
+    chassis.turnToPoint(24, -48, 350, {.forwards = true,.maxSpeed=75,.minSpeed=0});
+    chassis.moveToPoint(24, -48, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});//move to ring stack
+
+    pros::delay(200);
+
+    // m_intake.brake();
+
+    // chassis.turnToPoint(9.5, 62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.moveToPoint(9.5, 62.5, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(12,-59.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(12, -59.5, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(250);
+    // chassis.turnToPoint(0, 69, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    
+    // chassis.turnToHeading(295,350);
+    chassis.turnToHeading(223,1200);
+    chassis.waitUntilDone();
+    leftMotors.move(30);
+    rightMotors.move(30);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+    // m_intake.brake();
+    intakeSpin = false;
+    // m_intake.brake();
+    // intakeSpin=false;
+    m_lift.move(127);
+    pros::delay(800);
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+
+void ringRushRed(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = false;
+    chassis.setPose(-52,36,90);//(-52, 8.5, -110);
+    m_lift.move(52);
+    chassis.moveToPoint(-24, 36, 1500,{.forwards = true , .maxSpeed = 127,.minSpeed = 30,.earlyExitRange=2});
+    chassis.waitUntilDone();
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+    intakeSpin = true;
+    chassis.moveToPoint(-9.5, 41, 1500,{.forwards = true , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(350);
+    // m_intake.brake();
+    intakeSpin = false;
+    chassis.turnToPoint(-24, 24, 700, {.forwards = false,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(-24, 24, 1500,{.forwards = false , .maxSpeed = 100,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(100);
+    intakeSpin = true;
+    chassis.turnToPoint(-24, 48, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(-24, 48, 1200,{.forwards = true , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    pros::delay(400);
+    
+    chassis.turnToPoint(-10, 62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-10, 62.5, 1000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(250);
+    // chassis.turnToPoint(0, 69, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.turnToHeading(115,350);
+    // chassis.turnToHeading(41,800);
+    // chassis.waitUntilDone();
+    m_lift.move(127);
+    leftMotors.move(30);
+    rightMotors.move(30);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(100);
+    leftMotors.brake();
+    rightMotors.brake();
+    // m_intake.brake();
+    intakeSpin = false;
+    // m_lift.move(127);
+    pros::delay(620);
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    intakeSpin = true;
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    m_lift.move(-127);
+
+    chassis.turnToPoint(-8.5, 52.5, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(-8.5, 52.5, 1200,{.forwards = true , .maxSpeed = 110,.minSpeed = 10,.earlyExitRange=1});
+    pros::delay(350);
+
+    // chassis.turnToPoint(-48, 24, 350, {.forwards = false,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(-48, 24, 2000,{.forwards = false , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntil(24);
+    p_intake.set_value(true);
+    chassis.waitUntilDone();
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+    chassis.turnToPoint(-48, 2, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-48, 2, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(100);
+    p_intake.set_value(false);
+    chassis.moveToPoint(-48, 7, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(300);
+    chassis.turnToPoint(-65, 62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-65, 62.5, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntil(24);
+    p_stick.set_value(true);
+    chassis.waitUntilDone();
+    chassis.turnToHeading(55,600,{.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    p_stick.set_value(false);
+    pros::delay(50);
+    // chassis.turnToHeading(0,700);
+    // chassis.swingToHeading(90, DriveSide::RIGHT, 900);
+    leftMotors.move(40);
+    rightMotors.move(40);
+    pros::delay(650);
+    leftMotors.brake();
+    rightMotors.brake();
+}
+
+void ringRushBlue(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = true;
+    chassis.setPose(52,36,270);//(-52, 8.5, -110);
+    m_lift.move(52);
+    chassis.moveToPoint(24, 36, 1500,{.forwards = true , .maxSpeed = 127,.minSpeed = 30,.earlyExitRange=2});
+    chassis.waitUntilDone();
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+    intakeSpin = true;
+    chassis.moveToPoint(9.5, 41, 1500,{.forwards = true , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(100);
+    // m_intake.brake();
+    intakeSpin = false;
+    chassis.turnToPoint(25, 23, 800, {.forwards = false,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(26, 22, 1600,{.forwards = false , .maxSpeed = 75,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(165);
+    intakeSpin = true;
+    chassis.turnToPoint(24, 48, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(24, 48, 1200,{.forwards = true , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    pros::delay(400);
+    
+    chassis.turnToPoint(8.5, 62, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(7.5, 63, 1000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(250);
+    // chassis.turnToPoint(0, 69, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.turnToHeading(115,350);
+    // chassis.turnToHeading(41,800);
+    // chassis.waitUntilDone();
+    m_lift.move(127);
+    leftMotors.move(30);
+    rightMotors.move(30);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(100);
+    leftMotors.brake();
+    rightMotors.brake();
+    // m_intake.brake();
+    intakeSpin = false;
+    // m_lift.move(127);
+    pros::delay(620);
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    intakeSpin = true;
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    m_lift.move(-127);
+
+    chassis.turnToPoint(6.8, 50.5, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(6.8, 50.5, 1200,{.forwards = true , .maxSpeed = 110,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(350);
+
+    leftMotors.move(-35);
+    rightMotors.move(-35);
+    pros::delay(200);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    // chassis.moveToPoint(42, 58, 2000,{.forwards = false , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+
+    // // chassis.turnToPoint(-48, 24, 350, {.forwards = false,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    // chassis.moveToPoint(48, 24, 2000,{.forwards = false , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    // chassis.waitUntil(24);
+    // p_intake.set_value(true);
+    // chassis.waitUntilDone();
+    // m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    // m_lift.brake();
+    // chassis.turnToPoint(48, 2, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.moveToPoint(48, 2, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    // chassis.waitUntilDone();
+    // pros::delay(100);
+    // p_intake.set_value(false);
+    // chassis.moveToPoint(48, 7, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    // chassis.waitUntilDone();
+    // pros::delay(300);
+    chassis.turnToPoint(62.5, 65, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.waitUntilDone();
+    // p_stick.set_value(true);
+    chassis.moveToPoint(62, 65, 1250, {.forwards = true,.maxSpeed=110,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntil(24);
+    p_stick.set_value(true);
+    chassis.waitUntilDone();
+    chassis.turnToHeading(145,600,{.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    p_stick.set_value(false);
+    pros::delay(50);
+    // chassis.turnToHeading(0,700);
+    // chassis.swingToHeading(90, DriveSide::RIGHT, 900);
+    leftMotors.move(40);
+    rightMotors.move(40);
+    pros::delay(650);
+    // leftMotors.brake();
+    // rightMotors.brake();
+
+    leftMotors.move(-46);
+    rightMotors.move(-30);
+    pros::delay(320);
+    leftMotors.brake();
+    rightMotors.brake();
+    
+    // chassis.turnToPoint(48, 24, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // // chassis.turnToPoint(-48, 24, 350, {.forwards = false,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    // chassis.moveToPoint(48, 24, 2000,{.forwards = true , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    // chassis.waitUntil(24);
+    // p_intake.set_value(true);
+    // chassis.waitUntilDone();
+    // m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    // m_lift.brake();
+    chassis.turnToPoint(48, 2, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(48, 2, 2000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    p_intake.set_value(true);
+    // chassis.waitUntilDone();
+    chassis.waitUntilDone();
+    pros::delay(100);
+    p_intake.set_value(false);
+    chassis.moveToPoint(48, 7, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(300);
+}
+void fourGopSoloRed(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = false;
+}
+
+void fourGopSoloBlue(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = true;
+}
+void mogoRushred_R(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::RED);//check if auto_intake fucks stuff up
+    });
+    b_colorState = false;
+    // b_colorState=true;
+    chassis.setPose(55,-37,90);
+    m_lift.move(10);
+    chassis.moveToPose(4.5, -47, 135, 2000, {.forwards = false, .lead = 0.3});
+    chassis.waitUntilDone();
+    m_lift.brake();
+    p_mogo.set_value(true);
+
+    intakeSpin = true;
+    chassis.moveToPoint(24, -48, 2000);
+    pros::delay(200);
+    chassis.turnToPoint(7.5, -63, 2000);
+    p_mogo.set_value(false);
+    chassis.moveToPoint(7.5, -63, 2000);
+    chassis.waitUntilDone();
+    
+    m_lift.move(127);
+    pros::delay(200);
+    m_lift.move(-127);
+    pros::delay(400);
+    m_lift.brake();
+
+    chassis.turnToPoint(22, -24, 2000);
+    chassis.moveToPoint(22, -24, 2000, {.forwards = false});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+
+    chassis.turnToPoint(48, 0, 2000);
+    p_intake.set_value(true);
+    chassis.moveToPoint(48, 0, 2000);
+    pros::delay(200);
+    p_intake.set_value(false);
+    chassis.moveToPoint(45, -3, 2000, {.forwards = false,.maxSpeed = 60});
+
+}
+void mogoRushblue_R(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::RED);//check if auto_intake fucks stuff up
+    });
+    b_colorState = true;
+    // b_colorState=true;
+    chassis.setPose(-55, -37, 270);
+    m_lift.move(25);
+    chassis.moveToPose(-4.5, 47, 315, 2000, {.forwards = false, .lead = 0.35});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    m_lift.brake();
+
+    intakeSpin = true;
+    chassis.turnToPoint(-24, -48, 2000);
+    chassis.moveToPoint(-24, -48, 2000);
+    pros::delay(200);
+    chassis.turnToPoint(-7.5, -63, 2000);
+    p_mogo.set_value(false);
+    chassis.moveToPoint(-7.5, -63, 2000);
+    chassis.waitUntilDone();
+    
+    m_lift.move(127);
+    pros::delay(200);
+    m_lift.move(-127);
+    pros::delay(400);
+    m_lift.brake();
+
+    chassis.turnToPoint(-22, -24, 2000);
+    chassis.moveToPoint(-22, -24, 2000, {.forwards = false});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+
+    chassis.turnToPoint(-48, 0, 2000);
+    p_intake.set_value(true);
+    chassis.moveToPoint(-48, 0, 2000);
+    pros::delay(200);
+    p_intake.set_value(false);
+    chassis.moveToPoint(-45, -3, 2000, {.forwards = false,.maxSpeed = 60});
+    
+
+   
+}
+
+void mogoRushRed(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = false;
+    chassis.setPose(-52,-36,90);//(-52, 8.5, -110);
+    m_lift.move(52);
+    chassis.moveToPoint(-21, -36, 1500,{.forwards = true , .maxSpeed = 127,.minSpeed = 100,.earlyExitRange=2});
+    chassis.waitUntilDone();
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+    intakeSpin = true;
+    chassis.moveToPoint(-10.5, -43, 1500,{.forwards = true , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntil(13);
+    p_stick.set_value(true);
+    chassis.waitUntilDone();
+
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    pros::delay(350);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    p_stick.set_value(false);
+
+    chassis.turnToPoint(-24, -24, 700, {.forwards = false,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(-24, -24, 1500,{.forwards = false , .maxSpeed = 100,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(100);
+    intakeSpin = true;
+    chassis.turnToPoint(-24, -48, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(-24, -48, 1200,{.forwards = true , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    pros::delay(400);
+    
+    chassis.turnToPoint(-10, -62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-10, -62.5, 1000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(250);
+    // chassis.turnToPoint(0, 69, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.turnToHeading(115,350);
+    // chassis.turnToHeading(41,800);
+    // chassis.waitUntilDone();
+    m_lift.move(127);
+    leftMotors.move(30);
+    rightMotors.move(30);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(100);
+    leftMotors.brake();
+    rightMotors.brake();
+    // m_intake.brake();
+    intakeSpin = false;
+    // m_lift.move(127);
+    pros::delay(620);
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    intakeSpin = true;
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    m_lift.move(-127);
+
+    chassis.turnToPoint(-65, -62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-65, -62.5, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntil(24);
+    p_stick.set_value(true);
+    chassis.waitUntilDone();
+    chassis.turnToHeading(325,600,{.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    p_stick.set_value(false);
+    pros::delay(50);
+    // chassis.turnToHeading(0,700);
+    // chassis.swingToHeading(90, DriveSide::RIGHT, 900);
+    leftMotors.move(40);
+    rightMotors.move(40);
+    pros::delay(700);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    // chassis.moveToPoint(-48, -24, 2000,{.forwards = false , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    // chassis.waitUntil(24);
+    p_intake.set_value(true);
+    // chassis.waitUntilDone();
+    // m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    // m_lift.brake();
+    chassis.turnToPoint(-48, -2, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-48, -2, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(100);
+    p_intake.set_value(false);
+    chassis.moveToPoint(-48, -7, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(300);
+}
+
+void mogoRushBlue(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = true;
+    chassis.setPose(52,-36,270);//(-52, 8.5, -110);
+    m_lift.move(52);
+    chassis.moveToPoint(21, -36, 1500,{.forwards = true , .maxSpeed = 127,.minSpeed = 100,.earlyExitRange=2});
+    chassis.waitUntilDone();
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+    intakeSpin = true;
+    chassis.turnToPoint(11, -40, 450, {.forwards = true,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(11, -40, 1500,{.forwards = true , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntil(13);
+    p_stick.set_value(true);
+    chassis.waitUntilDone();
+
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    pros::delay(350);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    p_stick.set_value(false);
+
+    chassis.turnToPoint(24, -24, 700, {.forwards = false,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(24, -24, 1500,{.forwards = false , .maxSpeed = 100,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(100);
+    intakeSpin = true;
+    chassis.turnToPoint(24, -48, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0,.earlyExitRange=1});
+    chassis.moveToPoint(24, -48, 1200,{.forwards = true , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    pros::delay(400);
+    
+    chassis.turnToPoint(10, -62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(10, -62.5, 1000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(250);
+    // chassis.turnToPoint(0, 69, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.turnToHeading(115,350);
+    // chassis.turnToHeading(41,800);
+    // chassis.waitUntilDone();
+    m_lift.move(127);
+    leftMotors.move(30);
+    rightMotors.move(30);
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(100);
+    leftMotors.brake();
+    rightMotors.brake();
+    // m_intake.brake();
+    intakeSpin = false;
+    // m_lift.move(127);
+    pros::delay(620);
+    leftMotors.move(-70);
+    rightMotors.move(-70);
+    intakeSpin = true;
+    // pros::delay(300);
+    // chassis.waitUntilDone();
+    pros::delay(500);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    m_lift.move(-127);
+
+    chassis.turnToPoint(65, -62.5, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(65, -62.5, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntil(24);
+    p_stick.set_value(true);
+    chassis.waitUntilDone();
+    chassis.turnToHeading(235,600,{.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    p_stick.set_value(false);
+    pros::delay(50);
+    // chassis.turnToHeading(0,700);
+    // chassis.swingToHeading(90, DriveSide::RIGHT, 900);
+    leftMotors.move(40);
+    rightMotors.move(40);
+    pros::delay(700);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    // chassis.moveToPoint(-48, -24, 2000,{.forwards = false , .maxSpeed = 127,.minSpeed = 10,.earlyExitRange=1});
+    // chassis.waitUntil(24);
+    p_intake.set_value(true);
+    // chassis.waitUntilDone();
+    // m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    // m_lift.brake();
+    chassis.turnToPoint(48, -2, 325, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(48, -2, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(100);
+    p_intake.set_value(false);
+    chassis.moveToPoint(48, -7, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(300);
+}
+
+
+void blank(){
+    b_colorState = false;
+}
+
+void skills57(){
+    pros::Task task_autoIntake([&]() {
+    //used to be a while loop
+        auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    });
+    b_colorState = false;
+    //defaults :))
+    chassis.setPose(-61,0,90);
+    // m_intake.move(127);
+     intakeSpin = true;
+    pros::delay(650);
+
+    chassis.moveToPoint(-48, 0, 1200,{.forwards = true,.maxSpeed=127,.minSpeed = 5,.earlyExitRange=1});
+    chassis.turnToPoint(-48, 26, 800, {.forwards = false,.minSpeed = 5,.earlyExitRange=1}); // face with back of bot
+    chassis.moveToPoint(-48, 26, 1800,{.forwards = false,.maxSpeed=70,.minSpeed = 5,.earlyExitRange=2});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(400);
+    chassis.turnToPoint(-24, 24, 800, {.forwards = true,.maxSpeed=127,.minSpeed = 5,.earlyExitRange=1});
+    chassis.moveToPoint(-24, 24, 2000,{.forwards = true,.maxSpeed=127,.minSpeed = 0,.earlyExitRange=1});
+    chassis.turnToPoint(1, 56.5, 800, {.forwards = true,.maxSpeed=127,.minSpeed = 5,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(350);
+
+    // HERE
+    // pros::Task task_firststage1([&]() {
+    // //used to be a while loop
+    //     lb_stage1(1200);
+    // });
+
+    pros::Task task_firststage1(lb_nth);
+    lb_is_active = true;
+    // lb_stage1(1200);//Lift ladybrown up
+    chassis.moveToPoint(1, 56.5, 1500,{.forwards = true,.maxSpeed=110,.minSpeed = 0,.earlyExitRange=1});//Drive to stake
+    
+    chassis.turnToHeading(0, 700);
+    chassis.waitUntilDone();
+    
+    leftMotors.move(45);
+    rightMotors.move(45);
+    pros::delay(450);
+    intakeSpin = false;
+    leftMotors.brake();
+    rightMotors.brake();
+    m_intake.brake();
+
+    lb_is_active = false;
+    // task_firststage1.suspend();
+    // task_firststage1.remove();
+
+    pros::delay(20);
+    m_lift.move(127);
+    pros::delay(750);
+    chassis.moveToPoint(0, 50, 2000,{.forwards = false,.maxSpeed=110,.minSpeed = 0,.earlyExitRange=1}); // move back
+    m_lift.move(-127);
+    intakeSpin = true;
+    // m_intake.move(127);
+    //  intakeSpin = true;
+    chassis.turnToPoint(-60, 50, 900, {.forwards = true});
+    chassis.moveToPoint(-36, 50, 2000,{.forwards = true,.maxSpeed=90,.minSpeed = 10,.earlyExitRange=1});
+    
+    chassis.moveToPoint(-60, 50, 2000,{.forwards = true,.maxSpeed=70,.minSpeed = 10,.earlyExitRange=1});
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+    chassis.turnToPoint(-48, 60, 1100, {.forwards = true,.maxSpeed=65,.minSpeed=0});
+    chassis.moveToPoint(-48, 60, 2500,{.forwards = true,.maxSpeed=75,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(200);
+    chassis.turnToPoint(-64, 64, 1200, {.forwards = false,.minSpeed=74}); // back of bot
+    chassis.waitUntilDone();
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    pros::delay(450);
+    leftMotors.brake();
+    rightMotors.brake();
+    p_mogo.set_value(false);
+
+    // 2/4
+    chassis.turnToPoint(-45, 48, 600, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(-45, 48, 2300,{.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(-45, -25+Y_DRIFT_VAL, 2000, {.forwards = false,.minSpeed = 5,.earlyExitRange=1}); // face with back of bot
+    chassis.moveToPoint(-45, 0+Y_DRIFT_VAL, 2500,{.forwards = false,.maxSpeed=127,.minSpeed = 5,.earlyExitRange=2});
+    chassis.turnToPoint(-45, -26+Y_DRIFT_VAL, 2000, {.forwards = false,.minSpeed = 5,.earlyExitRange=1}); // face with back of bot
+    chassis.moveToPoint(-45, -26+Y_DRIFT_VAL, 2500,{.forwards = false,.maxSpeed=65,.minSpeed = 5,.earlyExitRange=2});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(100);
+    chassis.turnToPoint(-24, -24+Y_DRIFT_VAL, 2500, {.forwards = true,.maxSpeed=127,.minSpeed = 5,.earlyExitRange=1});
+    chassis.moveToPoint(-24, -24+Y_DRIFT_VAL, 2000,{.forwards = true,.maxSpeed=127,.minSpeed = 0,.earlyExitRange=1});
+    chassis.turnToPoint(1, -55+Y_DRIFT_VAL, 800, {.forwards = true,.maxSpeed=127,.minSpeed = 5,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(400);
+    // pros::Task task_firststage([&]() {
+    // //used to be a while loop
+    //     lb_stage1(1200);
+    // });
+    pros::Task task_firststage(lb_nth);
+    lb_is_active = true;
+    // lb_stage1(1200);
+    chassis.moveToPoint(1, -55+Y_DRIFT_VAL, 1500,{.forwards = true,.maxSpeed=100,.minSpeed = 0,.earlyExitRange=1});
+    chassis.turnToHeading(180, 2000);
+    chassis.waitUntilDone();
+
+    leftMotors.move(45);
+    rightMotors.move(45);
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+    m_intake.brake();
+    intakeSpin = false;
+    lb_is_active = false;
+    // task_firststage.suspend();
+    // task_firststage.remove();
+    //Ladybrown
+    m_lift.move(127);
+    pros::delay(750);
+    chassis.moveToPoint(0, -48+Y_DRIFT_VAL, 2000,{.forwards = false,.maxSpeed=90,.minSpeed = 0,.earlyExitRange=1}); // move back
+    chassis.waitUntilDone();
+    m_lift.move(-127);
+    // m_intake.move(127);
+    intakeSpin = true;
+   
+    chassis.turnToPoint(-60, -48+Y_DRIFT_VAL, 900, {.forwards = true});
+    chassis.moveToPoint(-36, -48+Y_DRIFT_VAL, 2000,{.forwards = true,.maxSpeed=85,.minSpeed = 10,.earlyExitRange=1});
+    // chassis.turnToPoint(-60, -48, 2000, {.forwards = true});
+    chassis.moveToPoint(-60, -48+Y_DRIFT_VAL, 2000,{.forwards = true,.maxSpeed=65,.minSpeed = 10,.earlyExitRange=1});
+    m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    m_lift.brake();
+    // pros::delay(250);
+    chassis.turnToPoint(-48, -60+Y_DRIFT_VAL, 1100, {.forwards = true,.maxSpeed=65,.minSpeed=0});
+    chassis.moveToPoint(-48, -60+Y_DRIFT_VAL, 2500,{.forwards = true,.maxSpeed=70,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(200);
+    chassis.turnToPoint(-64, -64+Y_DRIFT_VAL, 1500, {.forwards = false,.minSpeed=10}); // back of bot
+    chassis.waitUntilDone();
+    leftMotors.move(-50);
+    rightMotors.move(-50);
+    pros::delay(550);
+    leftMotors.brake();
+    rightMotors.brake();
+    p_mogo.set_value(false);
+
+    // 3/4
+    chassis.turnToPoint(24, -48+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(24, -48+Y_DRIFT_VAL, 3500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    pros::delay(400);
+    // m_intake.brake();
+    intakeSpin = false;
+
+    chassis.turnToPoint(60+X_DRIFT_VAL, -21+Y_DRIFT_VAL, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(60+X_DRIFT_VAL, -21+Y_DRIFT_VAL, 3500, {.forwards = false,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(200);
+
+    chassis.turnToPoint(64, -64+Y_DRIFT_VAL, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.waitUntilDone();
+    leftMotors.move(55);
+    rightMotors.move(55);
+    pros::delay(400);
+    leftMotors.brake();
+    rightMotors.brake();
+    p_stick.set_value(true);
+    pros::delay(20);
+
+    // chassis.turnToPoint(70, -68+Y_DRIFT_VAL, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+    chassis.turnToHeading(342,900,{.maxSpeed=100});
+    pros::delay(300);
+    p_stick.set_value(false);
+    chassis.waitUntilDone();
+    pros::delay(50);
+    
+    leftMotors.move(-80);
+    rightMotors.move(-80);
+    pros::delay(640);
+    leftMotors.brake();
+    rightMotors.brake();
+    p_mogo.set_value(false);
+    pros::delay(100);
+    chassis.turnToPoint(48, -24+Y_DRIFT_VAL, 600, {.forwards = true,.maxSpeed=90,.minSpeed=0});
+    chassis.moveToPoint(48, -24+Y_DRIFT_VAL, 1500, {.forwards = true,.maxSpeed=90,.minSpeed = 0,.earlyExitRange=1});
+
+    chassis.turnToPoint(46.5, 6+Y_DRIFT_VAL, 900, {.forwards = false,.maxSpeed=90,.minSpeed=0});
+    chassis.moveToPoint(46.5, 6+Y_DRIFT_VAL, 2500, {.forwards = false,.maxSpeed=79,.minSpeed = 10,.earlyExitRange=2});
+    
+    // chassis.turnToPoint(46.5, 0+Y_DRIFT_VAL, 1200, {.forwards = false,.maxSpeed=90,.minSpeed=0});
+    chassis.moveToPoint(46.5, 0.5+Y_DRIFT_VAL, 1200, {.forwards = true,.maxSpeed=65,.minSpeed = 0,.earlyExitRange=0});
+
+    // New 
+    chassis.turnToHeading(270,900, {.maxSpeed=127,.minSpeed=0});
+    chassis.waitUntilDone();
+
+    // chassis.turnToPoint(48, 0+Y_DRIFT_VAL, 1200, {.forwards = false,.maxSpeed=90,.minSpeed=0});
+    // chassis.moveToPoint(48, 0+Y_DRIFT_VAL, 2500, {.forwards = false,.maxSpeed=70,.minSpeed = 10,.earlyExitRange=2});
+
+    leftMotors.move(-60);
+    rightMotors.move(-60);
+    pros::delay(590);
+    chassis.setBrakeMode(pros::E_MOTOR_BRAKE_HOLD);
+    leftMotors.brake();
+    rightMotors.brake();
+    pros::delay(150);
+    // chassis.setBrakeMode(pros::E_MOTOR_BRAKE_HOLD);
+
+    allianceStake_macro();
+
+    // m_intake.move(127);
+    intakeSpin = true;
+    pros::delay(800);
+
+    // chassis.turnToPoint(48, 0+Y_DRIFT_VAL, 900, {.forwards = false,.maxSpeed=90,.minSpeed=0});
+    chassis.moveToPoint(50, -6.5+Y_DRIFT_VAL, 2500, {.forwards = false,.maxSpeed=79,.minSpeed = 10,.earlyExitRange=2});
+
+    chassis.turnToPoint(46.5, 12, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(46.5, 12, 1400, {.forwards = false,.maxSpeed=75,.minSpeed = 10,.earlyExitRange=1});
+
+    chassis.waitUntilDone();
+    p_mogo.set_value(true);
+    pros::delay(200);
+    // m_intake.move(127);
+    intakeSpin = true;
+
+
+    // chassis.turnToPoint(40, -12, 700, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+
+    // // chassis.turnToPoint(24, -24, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.moveToPoint(24, -24, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    
+    // chassis.turnToPoint(0, 0, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.moveToPoint(0, 0, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+
+    // chassis.turnToPoint(24+X_DRIFT_VAL, 24+Y_DRIFT_VAL, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.moveToPoint(24+X_DRIFT_VAL, 24+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    // chassis.turnToPoint(24+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    // chassis.moveToPoint(24+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    // chassis.turnToPoint(51+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 1150, {.forwards = true,.maxSpeed=65,.minSpeed=0});
+    // chassis.moveToPoint(51+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
+    // pros::delay(50);
+
+    chassis.turnToPoint(40, -12, 450, {.forwards = true,.maxSpeed=127,.minSpeed=10});
+
+    // chassis.turnToPoint(24, -24, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+    chassis.moveToPoint(24, -24, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    
+    chassis.turnToPoint(0, 0, 450, {.forwards = true,.maxSpeed=127,.minSpeed=10});
+    chassis.moveToPoint(0, 0, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+
+    chassis.turnToPoint(24+X_DRIFT_VAL, 24+Y_DRIFT_VAL, 450, {.forwards = true,.maxSpeed=127,.minSpeed=10});
+    chassis.moveToPoint(24+X_DRIFT_VAL, 24+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(24+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 450, {.forwards = true,.maxSpeed=127,.minSpeed=10});
+    chassis.moveToPoint(24+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+    chassis.turnToPoint(51+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 450, {.forwards = true,.maxSpeed=65,.minSpeed=10});
+    chassis.moveToPoint(51+X_DRIFT_VAL, 48+Y_DRIFT_VAL, 1400, {.forwards = true,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
+    pros::delay(50);
+    
+    // chassis.turnToPoint(70+X_DRIFT_VAL, 70+Y_DRIFT_VAL, 1200, {.forwards = false,.minSpeed=50}); // back of bot
+    chassis.turnToHeading(202.5,1200,{.minSpeed=50});
+    chassis.waitUntilDone();
+    leftMotors.move(-65);
+    rightMotors.move(-65);
+    // chassis.tank(-50,-50);
+    pros::delay(550);
+    leftMotors.brake();
+    rightMotors.brake();
+    p_mogo.set_value(false);
+
+    pros::delay(100);
+
+    leftMotors.move(50);
+    rightMotors.move(50);
+    pros::delay(500);
+    leftMotors.brake();
+    rightMotors.brake();
+
+    // chassis.turnToPoint(24+X_DRIFT_VAL, 24+Y_DRIFT_VAL, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+}
+
+
+int autonStateV2 = 0;
+
+void autonSelectSwitch(){
+    while(1){
+        pros::delay(20);
+        if(s_autonSwitch.get_new_press()){ autonStateV2++; if(autonStateV2>9) autonStateV2 = 0; } // 18 original
+        // switch(autonStateV2){
+        //     case 0: pros::lcd::set_text(4, "Default Auton"); break;
+        //     case 1: pros::lcd::set_text(4, "Solo Red"); break;
+        //     case 2: pros::lcd::set_text(4, "Red Negative Quals"); break;
+        //     case 3: pros::lcd::set_text(4, "Red Negative Safe Quals"); break;
+        //     case 4: pros::lcd::set_text(4, "Red Positive Quals"); break;
+        //     case 5: pros::lcd::set_text(4, "Solo Blue"); break;
+        //     case 6: pros::lcd::set_text(4, "Blue Negative Quals"); break;
+        //     case 7: pros::lcd::set_text(4, "Blue Negative Safe Quals"); break;
+        //     case 8: pros::lcd::set_text(4, "Blue Positive Quals"); break;
+        //     case 9: pros::lcd::set_text(4, "Red Negative Elims"); break;
+        //     case 10: pros::lcd::set_text(4, "Red Negative Ring Rush Elims"); break;
+        //     case 11: pros::lcd::set_text(4, "Red Positive Elims"); break;
+        //     case 12: pros::lcd::set_text(4, "Red Positive Mogo Rush Elims"); break;
+        //     case 13: pros::lcd::set_text(4, "Blue Negative Elims"); break;
+        //     case 14: pros::lcd::set_text(4, "Blue Negative Ring Rush Elims"); break;
+        //     case 15: pros::lcd::set_text(4, "Blue Positive Elims"); break;
+        //     case 16: pros::lcd::set_text(4, "Blue Positive Mogo Rush Elims"); break;
+        //     case 17: pros::lcd::set_text(4, "Skills"); break;
+        //     case 18: pros::lcd::set_text(4, "Only Go Forward"); break;
+        //     default: pros::lcd::set_text(4, "Default Auton"); break;
+        // }
+
+        switch(autonStateV2){
+            case 0: pros::lcd::set_text(4, "Default Auton"); break;
+            case 1: pros::lcd::set_text(4, "Solo Red"); break;
+            case 2: pros::lcd::set_text(4, "Solo Blue"); break;
+            case 3: pros::lcd::set_text(4, "Red_ringside"); break;
+            case 4: pros::lcd::set_text(4, "Blue_ringside"); break;
+            case 5: pros::lcd::set_text(4, "Red_safeRingside"); break;
+            case 6: pros::lcd::set_text(4, "Blue_safeRingside"); break;
+            case 7: pros::lcd::set_text(4, "Red Ring Rush"); break;
+            case 8: pros::lcd::set_text(4, "Blue Ring Rush"); break;
+            case 9: pros::lcd::set_text(4, "Skills"); break;
+            default: pros::lcd::set_text(4, "Default Auton"); break;
+        }
+    }
+}
+
+colorVals getColor(bool colorValV3){
+    return colorValV3 ? colorVals::RED : colorVals::BLUE;
+}
+
+void initialize() {
+    pros::lcd::initialize();
+    // lv_init();
+    // colorVals initial = intialize_sort(); ----> Determines which color to sort
+    // pros::Task task_LVGL(screen);
+    pros::Task task_Select(autonSelectSwitch);
+    // pros::Task sorterC([&]() {
+    //     colorSortV2(getColor(b_colorState));
+    // });
+
+
+    
+    // pros::Task task_colorSort([&]() {
+    // //used to be a while loop
+    //     auto_intake(colorVals::BLUE);//check if auto_intake fucks stuff up
+    // });
+    
+    // pros::Task task_colorSort();
+    chassis.setPose(0, 0, 0);
+    chassis.calibrate(); 
+    m_intake.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+    s_colorSort.set_led_pwm(100);
+
+    pros::Task screenTask([&]() {
+        while (true) {
+            // pros::lcd::print(0, "State: %d", lift_state); // x
+            // pros::lcd::print(1, "Dist: %d", (int)(s_lbDist.get_distance())); // x
+            pros::lcd::print(0, "X: %f", chassis.getPose().x); // x
+            pros::lcd::print(1, "Y: %f", chassis.getPose().y); // y
+            pros::lcd::print(2, "Theta: %f", chassis.getPose().theta); // heading 
+			// // pros::lcd::print(0, "Lift Pos: %f", s_lift.get_position()); 
+            pros::delay(50);
+        }
+    });
+
+
+}
+void disabled() {}
+void competition_initialize() {}
+
+ASSET(example_txt);
+
+void autonomous() {
+    auto_intake_IO = true;
+
+    // pros::Task auto_Intake([&]() {
+    //     // auto_intake(intial);
+    // });
+    pros::Task sorterC([&]() {
+        colorSortV2(getColor(b_colorState));
+    });
+    
+    
+    // intakeSpin = true;
+    // pros::delay(3000);
+    // m_intake.brake();
+    // intakeSpin = false;
+
+    // test();
+    // redPosQual();
+    // skills();
+    // redNegBase();
+    // intakeCorner();
+    // safeRedNegQuals();
+    // redNegElims();
+    // blueNegElims();
+    // mogoRushred_R();
+    // mogoRushblue_R();
+    // soloRed();
+    // pros::delay(100000000000);
+
+    // switch (autonStateV2) {
+    //     case 0: blank(); break;
+	// 	case 1: soloRed(); break;
+	// 	case 2: redNegQual(); break;//soloblue
+    //     case 3: safeRedNegQual(); break;//ringside red
+	// 	case 4: redPosQual(); break;//rindside blue
+	// 	case 5: soloBlue(); break;
+	// 	case 6: blueNegQual(); break;
+    //     case 7: safeBlueNegQual(); break;
+    //     case 8: bluePosQual(); break;
+    //     case 9: redNegElims(); break;
+    //     case 10: ringRushRed(); break;
+    //     case 11: redPosElim(); break;
+    //     case 12: mogoRushRed(); break;
+    //     case 13: blueNegElims(); break;
+    //     case 14: ringRushBlue(); break;
+    //     case 15: bluePosElim(); break;
+    //     case 16: mogoRushBlue(); break;
+    //     case 17: skills(); break;
+    //     case 18: goForwardAuton(); break;
+	// 	default: blank(); break;
+    // }
+
+
+    // soloRed();
+    // skills57();
+    // ringRushBlue();
+    // // ringRushRed();
+    // mogoRushBlue();
+    // pros::delay(100000000);
+    switch (autonStateV2) {
+        case 0: blank(); break;
+        case 1: soloRed(); break;//solo  red
+        case 2: soloBlue(); break;//solo blue
+        case 3: redNegQual(); break;//ringside red
+        case 4: blueNegQual(); break;//rindside blue
+        case 5: safeRedNegQual(); break;//safe ringside red
+        case 6: safeBlueNegQual(); break;//safe ringside blue
+        case 7: ringRushRed(); break;//safe ringside blue
+        case 8: ringRushBlue(); break;//safe ringside blue
+        case 9: skills(); break;
+        // case 5: soloBlue(); break;
+        // case 6: blueNegQual(); break;
+        // case 7: safeBlueNegQual(); break;
+        // case 8: bluePosQual(); break;
+        // case 9: redNegElims(); break;
+        // case 10: ringRushRed(); break;
+        // case 11: redPosElim(); break;
+        // case 12: mogoRushRed(); break;
+        // case 13: blueNegElims(); break;
+        // case 14: ringRushBlue(); break;
+        // case 15: bluePosElim(); break;
+        // case 16: mogoRushBlue(); break;
+        // case 17: skills(); break;
+        // case 18: goForwardAuton(); break;
+        default: blank(); break;
+    }
+}
+
+void autolift(){
+    if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)){
+        lift_state++;
+        if(lift_state >= 2) { lift_state = 2; controller.rumble("."); }
+    }
+    else if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)){
+        lift_state--;
+        if(lift_state < 0 ) lift_state = 0;
+    }
+    lift_error =  l_dist_target[lift_state] - s_lbDist.get_distance();
+    if(std::fabs(lift_error) < 5 ){
+        m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+        m_lift.brake();
+    }
+    else if(lift_error> 0){ m_lift.move(lift_error*lift_kp_up); }
+    else m_lift.move(lift_error*lift_kp_down);
+    if(s_lbDist.get_distance() < 20){ s_lift.reset(); }
+
+    std::string a = std::to_string(lift_state);
+    controller.set_text(0,0,a);
+    std::string b = std::to_string(s_lbDist.get_distance());
+    controller.set_text(2,2,b);
+}
+
+void lift(){
+    if(lift_state == 2){
+        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)){
+            m_lift.move(90);
+            pressCounter = 0;
+        }
+        else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)){
+            m_lift.move(-90);
+            pressCounter++;
+            if(s_lbDist.get_distance() < 230) lift_state = 0;
+           
+        }
+        else{
+            m_lift.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+            m_lift.brake();
+            pressCounter = 0;
+        }
+        if(pressCounter > 50){ lift_state = 0; }
+    }
+    else autolift();
+}
+
+void opcontrol() {
+
+    // pros::Task drive_Intake([&]() {
+    //     drive_intake(colorVals::RED);
+    // });
+
+    pros::Task sorterC([&]() {
+        colorSortV2(getColor(b_colorState));
+    });
+
+    lift_state = 0;
+    auto_intake_IO = false;
+    bool b_mogo = false;
+    // bool b_intake = false;
+	leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST);
+	rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST);
+    s_lift.reset_position();
+    
+    while(1) {
+        int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
+        int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
+        chassis.arcade(leftY, rightX);
+        lift();
+		if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)) { b_mogo = !b_mogo; p_mogo.set_value(b_mogo); }
+        // if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) { b_intake = !b_intake; p_intake.set_value(b_intake); }
+		(controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT)) ? p_stick.set_value(true) : p_stick.set_value(false);
+        (controller.get_digital(pros::E_CONTROLLER_DIGITAL_A)) ? p_intake.set_value(true) : p_intake.set_value(false);
+
+        // bool intakeFspin = false;
+        // bool intakeRspin = false;
+
+        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) { m_intake.move(127); }
+        else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) { m_intake.move(-127); }
+        else{ m_intake.brake(); }
+        
+        pros::delay(10);
+    }
+}
+
+
