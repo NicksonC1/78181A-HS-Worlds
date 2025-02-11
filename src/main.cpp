@@ -115,7 +115,7 @@ namespace Misc{
 
 // <-------------------------------------------------------------- Lady Brown ------------------------------------------------------------>
 namespace Lift{
-    int target = 0, pressCounter = 0;
+    int target = 0, pressCounter = 0, curr = 0;
     constexpr int RESET = 0;
     constexpr int LOAD = 300;
     constexpr int FREE = 600;
@@ -126,7 +126,7 @@ namespace Lift{
     constexpr int NUM_STATES = sizeof(STATES) / sizeof(STATES[0]);
     void setState(float state) { target = state; }
     void move() { 
-        double ukp = 0.5, dkp = 0.5, error = target - Sensor::lbR.get_position(), vU = ukp * error, vD = dkp * error; 
+        double ukp = 0.5, dkp = 0.3, error = target - Sensor::lbR.get_position(), vU = ukp * error, vD = dkp * error; 
         if(target == SCORE){
             if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)){
                 Motor::lb.move(127);
@@ -161,20 +161,22 @@ namespace Color{
     bool ifSenseRed(int hue) { return (hue > rLow && Sensor::colorSort.get_hue() < rHigh) ?  true : false; }
     bool ifSenseBlue(int hue) { return (hue > bLow && Sensor::colorSort.get_hue() < bHigh) ? true : false; }
     void colorSortV2(colorVals input){
+        bool extend_once = false;
         while(1){
             int colorV = Sensor::colorSort.get_hue();
-            if(input == colorVals::BLUE && ifSenseBlue(colorV)){
+            if(input == colorVals::BLUE && ifSenseBlue(colorV) && !extend_once){
                 Piston::sorter.set_value(true);
                 pros::delay(350);
-                // Piston::sorter.set_value(false);
+                extend_once = true;
             }
-            else if(input == colorVals::RED && ifSenseRed(colorV)){
+            else if(input == colorVals::RED && ifSenseRed(colorV) && !extend_once){
                 Piston::sorter.set_value(true);
                 pros::delay(350);
-                // Piston::sorter.set_value(false);
+                extend_once = true;
             }
-            Piston::sorter.set_value(false);
-            pros::delay(Misc::DELAY);
+            else { Piston::sorter.set_value(false); }
+            extend_once = false;
+            pros::delay(10);
         }
     }
 } // namespace Color
@@ -279,8 +281,10 @@ void opcontrol() {
         if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) { Motor::intakeB.move(127); Motor::intakeT.move(-127); }
         else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) { Motor::intakeB.move(-127); Motor::intakeT.move(-127); }
         else{ Motor::intakeB.brake(); Motor::intakeT.brake(); }
-        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) { Lift::target++; }
-        else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) { Lift::target--; }
+        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) { Lift::curr++; }
+        else if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)) { Lift::curr--; }
+        if(Lift::curr > Lift::STATES.size()) { Lift::curr = 0;}
+        Lift::setState(Lift::STATES[Lift::curr]);
         if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)) Hang::move(1500,100);
         pros::delay(Misc::DELAY);
     }
