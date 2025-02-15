@@ -2,67 +2,67 @@
 
 ## Chassis
 
-```{doxygenclass} lemlib::Chassis
+```{doxygenclass} lebron::Chassis
 :members:
 ```
 
 ## Movement Options
 
-```{doxygenstruct} lemlib::TurnToPointParams
+```{doxygenstruct} lebron::TurnToPointParams
 :members:
 ```
 
-```{doxygenstruct} lemlib::TurnToHeadingParams
+```{doxygenstruct} lebron::TurnToHeadingParams
 :members:
 ```
 
-```{doxygenstruct} lemlib::SwingToPointParams
+```{doxygenstruct} lebron::SwingToPointParams
 :members:
 ```
 
-```{doxygenstruct} lemlib::SwingToHeadingParams
+```{doxygenstruct} lebron::SwingToHeadingParams
 :members:
 ```
 
-```{doxygenstruct} lemlib::MoveToPoseParams
+```{doxygenstruct} lebron::MoveToPoseParams
 :members:
 ```
 
-```{doxygenstruct} lemlib::MoveToPointParams
+```{doxygenstruct} lebron::MoveToPointParams
 :members:
 ```
 
 ## Builder Classes
 
-```{doxygenclass} lemlib::TrackingWheel
+```{doxygenclass} lebron::TrackingWheel
 :members:
 ```
 
-```{doxygenclass} lemlib::OdomSensors
+```{doxygenclass} lebron::OdomSensors
 :members:
 ```
 
-```{doxygennamespace} lemlib::Omniwheel
+```{doxygennamespace} lebron::Omniwheel
 ```
 
-```{doxygenclass} lemlib::Drivetrain
+```{doxygenclass} lebron::Drivetrain
 :members:
 ```
 
-```{doxygenclass} lemlib::ControllerSettings
+```{doxygenclass} lebron::ControllerSettings
 :members:
 ```
 
 <!--TODO: figure out whether this should be documented or not-->
 
-```{doxygenclass} lemlib::ExitCondition
+```{doxygenclass} lebron::ExitCondition
 :members:
 ```
 
-```{doxygenclass} lemlib::DriveCurve
+```{doxygenclass} lebron::DriveCurve
 :members:
 ```
 
-```{doxygenclass} lemlib::ExpoDriveCurve
+```{doxygenclass} lebron::ExpoDriveCurve
 :members:
 ```

@@ -1,10 +1,10 @@
 # 6 - Lateral Motion
 
 ```{tip}
-View the [example project](https://github.com/LemLib/LemLib/blob/stable/src/main.cpp) if you need more context for setup
+View the [example project](https://github.com/lebron/lebron/blob/stable/src/main.cpp) if you need more context for setup
 ```
 
-In most autons, you don't just want to spin the chassis in circles, you also want to move across the field. LemLib provides two PID based motions designed to do exactly this: `moveToPoint` and `moveToPose`. Both of these motions use both the angular and lateral PID controllers under the hood, meaning both will need to be tuned.
+In most autons, you don't just want to spin the chassis in circles, you also want to move across the field. lebron provides two PID based motions designed to do exactly this: `moveToPoint` and `moveToPose`. Both of these motions use both the angular and lateral PID controllers under the hood, meaning both will need to be tuned.
 
 ## Move To Point
 
@@ -35,12 +35,12 @@ chassis.moveToPoint(20, 15, 4000, {.forwards = false}, true);
 ```
 
 ```{seealso}
-{cpp:func}`moveToPoint <lemlib::Chassis::moveToPoint>` and {cpp:class}`MoveToPointParams <lemlib::MoveToPointParams>` API references.
+{cpp:func}`moveToPoint <lebron::Chassis::moveToPoint>` and {cpp:class}`MoveToPointParams <lebron::MoveToPointParams>` API references.
 ```
 
 ## Move To Pose
 
-Sometimes you need to be able to control what heading the chassis ends up at at the end move a lateral movement. LemLib provides you with a way to do this with the `moveToPose` motion. This motion uses a [boomerang](https://www.desmos.com/calculator/sptjw5szex) controller under the hood, with some added features.
+Sometimes you need to be able to control what heading the chassis ends up at at the end move a lateral movement. lebron provides you with a way to do this with the `moveToPose` motion. This motion uses a [boomerang](https://www.desmos.com/calculator/sptjw5szex) controller under the hood, with some added features.
 
 This motion works very similarly to the previous motion, except it attempts to move to a intermediate carrot point that changes position as the chassis gets closer. We highly recommend that you play around with the Desmos graph for a bit to see how it works.
 
@@ -83,5 +83,5 @@ chassis.moveToPose(
 ```
 
 ```{seealso}
-{cpp:func}`moveToPose <lemlib::Chassis::moveToPose>` and {cpp:class}`MoveToPoseParams <lemlib::MoveToPoseParams>` API references.
+{cpp:func}`moveToPose <lebron::Chassis::moveToPose>` and {cpp:class}`MoveToPoseParams <lebron::MoveToPoseParams>` API references.
 ```

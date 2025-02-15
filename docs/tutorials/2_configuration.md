@@ -1,12 +1,12 @@
 # 2 - Configuration
 
 ```{tip}
-View the [example project](https://github.com/LemLib/LemLib/blob/stable/src/main.cpp) if you need more context for setup
+View the [example project](https://github.com/lebron/lebron/blob/stable/src/main.cpp) if you need more context for setup
 ```
 
 ## Introduction
 
-Now that LemLib has been installed, we need to configure it before we can start using it. Most mistakes happen during configuration, so pay close attention to the instructions.
+Now that lebron has been installed, we need to configure it before we can start using it. Most mistakes happen during configuration, so pay close attention to the instructions.
 
 ## Drivetrain
 
@@ -28,7 +28,7 @@ pros::MotorGroup right_motors({4, 5, 6}); // right motors on ports 4, 5, 6
 ```
 
 ```{tip}
-Remember, you need `#include "lemlib/api.hpp"` at the top of your file otherwise there will be errors everywhere
+Remember, you need `#include "lebron/api.hpp"` at the top of your file otherwise there will be errors everywhere
 ```
 
 Now, we need to determine which way the motors spin when we apply a positive voltage. This can be done by moving the motor through the devices menu on the brain screen and observing how the drive wheels move. See the table below to determine whether a motor is reversed or not:
@@ -64,7 +64,7 @@ pros::MotorGroup left_motors({-1, 2, -3}, pros::MotorGearset::blue); // left mot
 pros::MotorGroup right_motors({4, -5, 6}, pros::MotorGearset::green); // right motors use 200 RPM cartridges
 ```
 
-Now that our motors are fully configured, we need to pass them to LemLib. We can do this through a helper class: `Drivetrain`. It needs the following information:
+Now that our motors are fully configured, we need to pass them to lebron. We can do this through a helper class: `Drivetrain`. It needs the following information:
  - Left motor group
  - Right motor group
  - track width
@@ -84,27 +84,27 @@ Record the track width, we'll need it soon.
 
 ### Wheel Diameter
 
-This one should be self-explanatory. It's the diameter of the wheels on your drivetrain. The diameter on the wheels are actually slightly different than the diameter advertised by Vex (and, as is typical of Vex, this is not documented anywhere). For that reason, LemLib includes constants for all the different wheels, as follows:
+This one should be self-explanatory. It's the diameter of the wheels on your drivetrain. The diameter on the wheels are actually slightly different than the diameter advertised by Vex (and, as is typical of Vex, this is not documented anywhere). For that reason, lebron includes constants for all the different wheels, as follows:
 
 ```{note}
 If, for whatever reason, you want a custom wheel size: you can input a number instead of a constant
 ```
 
-| **Wheel Type**     | **Actual Size** | **LemLib Constant**               |
+| **Wheel Type**     | **Actual Size** | **lebron Constant**               |
 | ------------------ | --------------- | --------------------------------- |
-| New 2"             | 2.125           | `lemlib::Omniwheel::NEW_2`        |
-| New 2.75"          | 2.75            | `lemlib::Omniwheel::NEW_275`      |
-| Old 2.75"          | 2.75            | `lemlib::Omniwheel::OLD_275`      |
-| Half-Cut New 2.75" | 2.744           | `lemlib::Omniwheel::NEW_275_HALF` |
-| Half-Cut Old 2.75" | 2.74            | `lemlib::Omniwheel::OLD_275_HALF` |
-| New 3.25"          | 3.25            | `lemlib::Omniwheel::NEW_325`      |
-| Old 3.25"          | 3.25            | `lemlib::Omniwheel::OLD_325`      |
-| Half-Cut New 3.25" | 3.246           | `lemlib::Omniwheel::NEW_325_HALF` |
-| Half-Cut Old 3.25" | 3.246           | `lemlib::Omniwheel::OLD_325_HALF` |
-| New 4"             | 4.00            | `lemlib::Omniwheel::NEW_4`        |
-| Old 4"             | 4.18            | `lemlib::Omniwheel::OLD_4`        |
-| Half-Cut New 4"    | 3.995           | `lemlib::Omniwheel::NEW_4_HALF`   |
-| Half-Cut Old 4"    | 4.175           | `lemlib::Omniwheel::OLD_4_HALF`   |
+| New 2"             | 2.125           | `lebron::Omniwheel::NEW_2`        |
+| New 2.75"          | 2.75            | `lebron::Omniwheel::NEW_275`      |
+| Old 2.75"          | 2.75            | `lebron::Omniwheel::OLD_275`      |
+| Half-Cut New 2.75" | 2.744           | `lebron::Omniwheel::NEW_275_HALF` |
+| Half-Cut Old 2.75" | 2.74            | `lebron::Omniwheel::OLD_275_HALF` |
+| New 3.25"          | 3.25            | `lebron::Omniwheel::NEW_325`      |
+| Old 3.25"          | 3.25            | `lebron::Omniwheel::OLD_325`      |
+| Half-Cut New 3.25" | 3.246           | `lebron::Omniwheel::NEW_325_HALF` |
+| Half-Cut Old 3.25" | 3.246           | `lebron::Omniwheel::OLD_325_HALF` |
+| New 4"             | 4.00            | `lebron::Omniwheel::NEW_4`        |
+| Old 4"             | 4.18            | `lebron::Omniwheel::OLD_4`        |
+| Half-Cut New 4"    | 3.995           | `lebron::Omniwheel::NEW_4_HALF`   |
+| Half-Cut Old 4"    | 4.175           | `lebron::Omniwheel::OLD_4_HALF`   |
 
 Record the wheel diameter, we'll need it soon.
 
@@ -122,17 +122,17 @@ This needs to be created after the motors and motor groups have been created, an
 
 ```cpp
 // drivetrain settings
-lemlib::Drivetrain drivetrain(&left_motor_group, // left motor group
+lebron::Drivetrain drivetrain(&left_motor_group, // left motor group
                               &right_motor_group, // right motor group
                               10, // 10 inch track width
-                              lemlib::Omniwheel::NEW_4, // using new 4" omnis
+                              lebron::Omniwheel::NEW_4, // using new 4" omnis
                               360, // drivetrain rpm is 360
                               2 // horizontal drift is 2 (for now)
 );
 ```
 ## Odometry
 
-Odometry is the algorithm that tracks the robots position. It does this through internal motors encoders (IME) and/or tracking wheels and/or V5 Inertial Sensors (IMU). We need to configure these sensors so LemLib can interact with them
+Odometry is the algorithm that tracks the robots position. It does this through internal motors encoders (IME) and/or tracking wheels and/or V5 Inertial Sensors (IMU). We need to configure these sensors so lebron can interact with them
 
 ### IMU
 
@@ -156,7 +156,7 @@ Tracking wheels are independent wheels that have an encoder attached to them. Se
 :align: center
 ```
 
-LemLib can work on any tracking setup, but some setups perform much better than others. See the table below:
+lebron can work on any tracking setup, but some setups perform much better than others. See the table below:
 
 ###### Heading Tracking:
 
@@ -304,9 +304,9 @@ pros::Rotation horizontal_encoder(20);
 // vertical tracking wheel encoder
 pros::adi::Encoder vertical_encoder('C', 'D', true);
 // horizontal tracking wheel
-lemlib::TrackingWheel horizontal_tracking_wheel(&horizontal_encoder, lemlib::Omniwheel::NEW_275, -5.75);
+lebron::TrackingWheel horizontal_tracking_wheel(&horizontal_encoder, lebron::Omniwheel::NEW_275, -5.75);
 // vertical tracking wheel
-lemlib::TrackingWheel vertical_tracking_wheel(&vertical_encoder, lemlib::Omniwheel::NEW_275, -2.5);
+lebron::TrackingWheel vertical_tracking_wheel(&vertical_encoder, lebron::Omniwheel::NEW_275, -2.5);
 ```
 
 ### Config
@@ -314,7 +314,7 @@ lemlib::TrackingWheel vertical_tracking_wheel(&vertical_encoder, lemlib::Omniwhe
 Now that we have configured all the sensors we need for 
 
 ```cpp
-lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
+lebron::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
                             nullptr, // vertical tracking wheel 2, set to nullptr as we are using IMEs
                             &horizontal_tracking_wheel, // horizontal tracking wheel 1
                             nullptr, // horizontal tracking wheel 2, set to nullptr as we don't have a second one
@@ -328,7 +328,7 @@ We aren't going to tune the PIDs in this tutorial, but we will in the next. For 
 
 ```cpp
 // lateral PID controller
-lemlib::ControllerSettings lateral_controller(10, // proportional gain (kP)
+lebron::ControllerSettings lateral_controller(10, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               3, // derivative gain (kD)
                                               3, // anti windup
@@ -340,7 +340,7 @@ lemlib::ControllerSettings lateral_controller(10, // proportional gain (kP)
 );
 
 // angular PID controller
-lemlib::ControllerSettings angular_controller(2, // proportional gain (kP)
+lebron::ControllerSettings angular_controller(2, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               10, // derivative gain (kD)
                                               3, // anti windup
@@ -354,7 +354,7 @@ lemlib::ControllerSettings angular_controller(2, // proportional gain (kP)
 
 ## Final Configuration
 
-Now we have all the necessary information to configure LemLib. See the code block below:
+Now we have all the necessary information to configure lebron. See the code block below:
 
 ```cpp
 // left motor group
@@ -363,10 +363,10 @@ pros::MotorGroup left_motor_group({-1, 2, -3}, pros::MotorGears::blue);
 pros::MotorGroup right_motor_group({4, -5, 6}, pros::MotorGears::green);
 
 // drivetrain settings
-lemlib::Drivetrain drivetrain(&left_motor_group, // left motor group
+lebron::Drivetrain drivetrain(&left_motor_group, // left motor group
                               &right_motor_group, // right motor group
                               10, // 10 inch track width
-                              lemlib::Omniwheel::NEW_4, // using new 4" omnis
+                              lebron::Omniwheel::NEW_4, // using new 4" omnis
                               360, // drivetrain rpm is 360
                               2 // horizontal drift is 2 (for now)
 );
@@ -378,12 +378,12 @@ pros::Rotation horizontal_encoder(20);
 // vertical tracking wheel encoder
 pros::adi::Encoder vertical_encoder('C', 'D', true);
 // horizontal tracking wheel
-lemlib::TrackingWheel horizontal_tracking_wheel(&horizontal_encoder, lemlib::Omniwheel::NEW_275, -5.75);
+lebron::TrackingWheel horizontal_tracking_wheel(&horizontal_encoder, lebron::Omniwheel::NEW_275, -5.75);
 // vertical tracking wheel
-lemlib::TrackingWheel vertical_tracking_wheel(&vertical_encoder, lemlib::Omniwheel::NEW_275, -2.5);
+lebron::TrackingWheel vertical_tracking_wheel(&vertical_encoder, lebron::Omniwheel::NEW_275, -2.5);
 
 // odometry settings
-lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
+lebron::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
                             nullptr, // vertical tracking wheel 2, set to nullptr as we are using IMEs
                             &horizontal_tracking_wheel, // horizontal tracking wheel 1
                             nullptr, // horizontal tracking wheel 2, set to nullptr as we don't have a second one
@@ -391,7 +391,7 @@ lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
 );
 
 // lateral PID controller
-lemlib::ControllerSettings lateral_controller(10, // proportional gain (kP)
+lebron::ControllerSettings lateral_controller(10, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               3, // derivative gain (kD)
                                               3, // anti windup
@@ -403,7 +403,7 @@ lemlib::ControllerSettings lateral_controller(10, // proportional gain (kP)
 );
 
 // angular PID controller
-lemlib::ControllerSettings angular_controller(2, // proportional gain (kP)
+lebron::ControllerSettings angular_controller(2, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               10, // derivative gain (kD)
                                               3, // anti windup
@@ -415,7 +415,7 @@ lemlib::ControllerSettings angular_controller(2, // proportional gain (kP)
 );
 
 // create the chassis
-lemlib::Chassis chassis(drivetrain, // drivetrain settings
+lebron::Chassis chassis(drivetrain, // drivetrain settings
                         lateral_controller, // lateral PID settings
                         angular_controller, // angular PID settings
                         sensors // odometry sensors
@@ -441,4 +441,4 @@ void initialize() {
 
 ## Conclusion
 
-You have now configured LemLib! We'll cover driver control next.
+You have now configured lebron! We'll cover driver control next.

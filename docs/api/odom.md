@@ -2,18 +2,18 @@
 
 ## General
 
-```{doxygenfunction} lemlib::update
+```{doxygenfunction} lebron::update
 ```
 
-```{doxygenfunction} lemlib::init
+```{doxygenfunction} lebron::init
 ```
 
 
 ## Pose
 
-```{doxygenclass} lemlib::Pose
+```{doxygenclass} lebron::Pose
 :members:
 ```
 
-```{doxygenfunction} lemlib::format_as
+```{doxygenfunction} lebron::format_as
 ```

@@ -2,7 +2,7 @@
 #include <bits/stdc++.h>
 // #include <iomanip>
 #include "main.h"
-#include "lemlib/api.hpp" // IWYU pragma: keep
+#include "lebron/api.hpp" // IWYU pragma: keep
 // #include "liblvgl/lvgl.h"
 // #include "liblvgl/llemu.hpp"
 #include "brainScreenLVGL.h"
@@ -43,19 +43,19 @@ namespace Piston{
 pros::Imu imu(2);
 pros::Rotation horizontalEnc(-16);
 pros::Rotation verticalEnc(-15);
-lemlib::TrackingWheel vertical_tracking_wheel(&verticalEnc, lemlib::Omniwheel::NEW_2 , 0.9); // Single
-lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.2); // Double Stacked
+lebron::TrackingWheel vertical_tracking_wheel(&verticalEnc, lebron::Omniwheel::NEW_2 , 0.9); // Single
+lebron::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.2); // Double Stacked
 
 // <---------------------------------------------------------------- Config ---------------------------------------------------------------->
-lemlib::Drivetrain drivetrain(&leftMotors, // left motor group
+lebron::Drivetrain drivetrain(&leftMotors, // left motor group
                               &rightMotors, // right motor group
                               11.5, // 11.5 inch track width
-                              lemlib::Omniwheel::NEW_325, // using new 3.25" omnis
+                              lebron::Omniwheel::NEW_325, // using new 3.25" omnis
                               450, // drivetrain rpm is 450
                               2 // horizontal drift is 2. If we had traction wheels, it would have been 8
 );
 
-lemlib::ControllerSettings linearController (8, // proportional gain (kP)
+lebron::ControllerSettings linearController (8, // proportional gain (kP)
                                              0, // integral gain (kI)
                                              5, // derivative gain (kD)
                                              3, // anti windup
@@ -66,7 +66,7 @@ lemlib::ControllerSettings linearController (8, // proportional gain (kP)
                                              5 // maximum acceleration (slew)
 );
 
-lemlib::ControllerSettings angularController (3, // proportional gain (kP)
+lebron::ControllerSettings angularController (3, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               15, // derivative gain (kD)
                                               3, // anti windup
@@ -78,7 +78,7 @@ lemlib::ControllerSettings angularController (3, // proportional gain (kP)
 );
 
 // sensors for odometry
-lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
+lebron::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
                             nullptr, // vertical tracking wheel 2, set to nullptr as we don't have a second one
                             &horizontal_tracking_wheel, // horizontal tracking wheel
                             nullptr, // horizontal tracking wheel 2, set to nullptr as we don't have a second one
@@ -86,19 +86,19 @@ lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
 );
 
 // input curve for throttle input during driver control
-lemlib::ExpoDriveCurve throttleCurve(1, // joystick deadband out of 127
+lebron::ExpoDriveCurve throttleCurve(1, // joystick deadband out of 127
                                      0, // minimum output where drivetrain will move out of 127
                                      1 // expo curve gain
 );
 
 // input curve for steer input during driver control
-lemlib::ExpoDriveCurve steerCurve(1, // joystick deadband out of 127
+lebron::ExpoDriveCurve steerCurve(1, // joystick deadband out of 127
                                   0, // minimum output where drivetrain will move out of 127
                                   1 // expo curve gain
 );
 
 // create the chassis
-lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
+lebron::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
 
 // <------------------------------------------------------------ Miscellaneous ------------------------------------------------------------>
 namespace Misc{

@@ -1,7 +1,7 @@
 # 7 - Pure Pursuit
 
 ```{tip}
-View the [example project](https://github.com/LemLib/LemLib/blob/stable/src/main.cpp) if you need more context for setup
+View the [example project](https://github.com/lebron/lebron/blob/stable/src/main.cpp) if you need more context for setup
 ```
 
 ## Introduction
@@ -24,7 +24,7 @@ Tuning Pure Pursuit is very simple. If you want the robot to follow the path mor
 You can use [path.jerryio.com](https://path.jerryio.com) to generate paths for the autonomous.
 
 Using the Path Generator is simple:
- - Select the LemLib format (top right).
+ - Select the lebron format (top right).
  - Left click drag to move existing waypoints (big purple circles).
  - Left click to add a waypoint.
  - Right click to remove a waypoint.
@@ -44,7 +44,7 @@ Path.jerryio saves paths as .txt files. You can upload this file to your robot, 
 
 To upload the path, all you need to do is save the .txt file to the `static` folder in your project. To do this, click `Ctrl + S` on Windows, or `⌘ + S` on Mac, then browse to the `static` folder and select it. Now if you hit save, it will automatically save to the file in your `static` folder.
 
-Almost there! Now we just need to tell the robot to follow the path. We can do this through the `lemlib::Chassis::follow` function. Below is an example of how to use it:
+Almost there! Now we just need to tell the robot to follow the path. We can do this through the `lebron::Chassis::follow` function. Below is an example of how to use it:
 ```cpp
 // path file name is "example.txt".
 // "." is replaced with "_" to overcome c++ limitations

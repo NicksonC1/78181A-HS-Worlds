@@ -2,38 +2,38 @@
 
 ## Timer
 
-```{doxygenclass} lemlib::Timer
+```{doxygenclass} lebron::Timer
 :members:
 ```
 
 ## PID
 
-```{doxygenclass} lemlib::PID
+```{doxygenclass} lebron::PID
 :members:
 ```
 
 ## Misc
 
-```{doxygenfunction} lemlib::slew
+```{doxygenfunction} lebron::slew
 ```
 
-```{doxygenfunction} lemlib::radToDeg
+```{doxygenfunction} lebron::radToDeg
 ```
 
-```{doxygenfunction} lemlib::degToRad
+```{doxygenfunction} lebron::degToRad
 ```
 
-```{doxygenfunction} lemlib::sanitizeAngle
+```{doxygenfunction} lebron::sanitizeAngle
 ```
 
-```{doxygenfunction} lemlib::angleError
+```{doxygenfunction} lebron::angleError
 ```
 
-```{doxygenfunction} lemlib::avg
+```{doxygenfunction} lebron::avg
 ```
 
-```{doxygenfunction} lemlib::ema
+```{doxygenfunction} lebron::ema
 ```
 
-```{doxygenfunction} lemlib::getCurvature
+```{doxygenfunction} lebron::getCurvature
 ```
