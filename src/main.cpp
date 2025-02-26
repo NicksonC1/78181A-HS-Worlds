@@ -100,9 +100,15 @@ lebron::ExpoDriveCurve steerCurve(1, // joystick deadband out of 127
 // create the chassis
 lebron::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
 
+std::vector<std::pair<float, float>> points;
+
 // <------------------------------------------------------------ Miscellaneous ------------------------------------------------------------>
 namespace Misc{
     constexpr int DELAY = 10;
+    void togglePiston(pros::adi::DigitalOut &piston, bool &state) {
+        state = !state;
+        piston.set_value(state);
+    }
     void cdrift(float lV, float rV, int timeout, bool cst = true){
         (cst == true) ? (leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST), rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST)) : (leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_BRAKE), rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_BRAKE));
         leftMotors.move(lV);
@@ -110,6 +116,26 @@ namespace Misc{
         pros::delay(timeout);
         leftMotors.brake();
         rightMotors.brake();
+    }
+    void curve(std::vector<std::pair<float, float>>& waypoints, int angular = 450, int lateral = 2300){
+        while(!waypoints.empty()){
+            std::pair<int, int> target = waypoints.front();
+            chassis.turnToPoint(target.first,target.second,angular,{.minSpeed = 10,.earlyExitRange = 2});
+            chassis.moveToPoint(target.first,target.second,lateral,{.minSpeed = 10,.earlyExitRange = 2});
+            chassis.waitUntilDone();
+            waypoints.erase(waypoints.begin());
+        }
+    }
+    void linear(double dist, int timeout, lebron::MoveToPointParams p = {}, bool async = true){
+        lebron::Pose pose = chassis.getPose(true);
+        dist < 0 ? p.forwards = false : p.forwards = true;
+        chassis.moveToPoint(
+        pose.x + std::sin(pose.theta) * dist,
+        pose.y + std::cos(pose.theta) * dist,
+        timeout,
+        p,
+        async);
+        // https://github.com/DHRA-2131/2024-25-2131H/blob/010ce1434e415ad07cc6ba06149c97fcf4c29a76/Rewrite%203/include/2131H/Systems/Chassis.hpp#L13
     }
 } // namespace Misc
 
@@ -156,12 +182,11 @@ namespace Color{
     enum class colorVals{ BLUE, RED };
     constexpr bool sRed = true; // True: Sort Red  Color::sRed;
     constexpr bool sBlue = false; // False: Sort Blue Color::sBlue;
-    bool state = false;
+    bool state = false, extend_once = false;
     constexpr double rLow = 10.0, rHigh = 50.0, bLow = 164.0, bHigh = 213.5;
     bool ifSenseRed(int hue) { return (hue > rLow && Sensor::colorSort.get_hue() < rHigh) ?  true : false; }
     bool ifSenseBlue(int hue) { return (hue > bLow && Sensor::colorSort.get_hue() < bHigh) ? true : false; }
     void colorSortV2(colorVals input){
-        bool extend_once = false;
         while(1){
             int colorV = Sensor::colorSort.get_hue();
             if(input == colorVals::BLUE && ifSenseBlue(colorV) && !extend_once){
@@ -198,6 +223,15 @@ namespace Hang{
 namespace Auton{
     int state = 0;
     void test() { Color::state = Color::sRed; }
+    void coords(){ 
+        points.emplace_back(-24,24);
+        points.emplace_back(-7,41);
+        points.emplace_back(24,48);
+        Misc::curve(points); // vec, angular timeout, lateral timeout
+    }
+    void linear(){
+        Misc::linear(24,2000,{.forwards = true,.maxSpeed = 127,.minSpeed = 10,.earlyExitRange = 2});
+    }
 } // namespace Auton
 
 void autonSelectSwitch(){
@@ -234,9 +268,9 @@ void initialize() {
     Sensor::colorSort.set_led_pwm(100);
     pros::Task screenTask([&]() {
         while (1) {
-            pros::lcd::print(0, "X: %f", chassis.getPose().x); // x
-            pros::lcd::print(1, "Y: %f", chassis.getPose().y); // y
-            pros::lcd::print(2, "Theta: %f", chassis.getPose().theta); // heading 
+            pros::lcd::print(0, "X: %f", chassis.getPose().x);
+            pros::lcd::print(1, "Y: %f", chassis.getPose().y);
+            pros::lcd::print(2, "Theta: %f", chassis.getPose().theta);
             pros::delay(50);
         }
     });
@@ -247,16 +281,18 @@ ASSET(example_txt); // PP
 // <------------------------------------------------------------- Autonomous ------------------------------------------------------------->
 void autonomous() {
     pros::Task sorterC([&]() { colorSortV2(getColor(Color::state)); });
+    Auton::coords();
+    pros::delay(10000000);
     switch (Auton::state) {
         case 0: Auton::test(); break;
-        // case 1: soloRed(); break;//solo red
-        // case 2: soloBlue(); break;//solo blue
-        // case 3: redNegQual(); break;//ringside red
-        // case 4: blueNegQual(); break;//rindside blue
-        // case 5: safeRedNegQual(); break;//safe ringside red
-        // case 6: safeBlueNegQual(); break;//safe ringside blue
-        // case 7: ringRushRed(); break;//safe ringside blue
-        // case 8: ringRushBlue(); break;//safe ringside blue
+        // case 1: soloRed(); break;
+        // case 2: soloBlue(); break;
+        // case 3: redNegQual(); break;
+        // case 4: blueNegQual(); break;
+        // case 5: safeRedNegQual(); break;
+        // case 6: safeBlueNegQual(); break;
+        // case 7: ringRushRed(); break;
+        // case 8: ringRushBlue(); break;
         // case 9: skills(); break;
         default: Auton::test(); break;
     }
@@ -273,8 +309,8 @@ void opcontrol() {
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
         chassis.arcade(leftY, rightX);
-		if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)) { b_mogo = !b_mogo; Piston::mogo.set_value(b_mogo); }
-        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) { b_pto = !b_pto; Piston::pto.set_value(b_pto); } // Testing | Del 
+		if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)) { Misc::togglePiston(Piston::mogo, b_mogo); }
+        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) { Misc::togglePiston(Piston::pto, b_pto); } // Testing | Del 
 		(controller.get_digital(pros::E_CONTROLLER_DIGITAL_LEFT)) ? Piston::lightsaberL.set_value(true) : Piston::lightsaberL.set_value(false);
         (controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT)) ? Piston::lightsaberR.set_value(true) : Piston::lightsaberR.set_value(false);
         (controller.get_digital(pros::E_CONTROLLER_DIGITAL_A)) ? Piston::intake.set_value(true) : Piston::intake.set_value(false);
