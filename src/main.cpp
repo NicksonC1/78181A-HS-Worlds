@@ -1,5 +1,8 @@
 // <--------------------------------------------------------------- Includes --------------------------------------------------------------->
 #include <bits/stdc++.h>
+#include <vector>
+#include <functional>
+#include <string>
 // #include <iomanip>
 #include "main.h"
 #include "lebron/api.hpp" // IWYU pragma: keep
@@ -234,23 +237,17 @@ namespace Auton{
     }
 } // namespace Auton
 
-void autonSelectSwitch(){
-    while(1){
+using AutonFunc = void(*)();
+std::vector<std::pair<std::string, AutonFunc>> autonRoutines = {
+    {"Default Auton", Auton::test},
+    {"Coords Testing", Auton::coords}
+};
+
+void autonSelectSwitch() {
+    while (1) {
         pros::delay(Misc::DELAY);
-        if(Sensor::autonSwitch.get_new_press()){ Auton::state++; if(Auton::state>9) Auton::state = 0; } 
-        switch(Auton::state){
-            case 0: pros::lcd::set_text(4, "Default Auton"); break;
-            // case 1: pros::lcd::set_text(4, "Solo Red"); break;
-            // case 2: pros::lcd::set_text(4, "Solo Blue"); break;
-            // case 3: pros::lcd::set_text(4, "Red_ringside"); break;
-            // case 4: pros::lcd::set_text(4, "Blue_ringside"); break;
-            // case 5: pros::lcd::set_text(4, "Red_safeRingside"); break;
-            // case 6: pros::lcd::set_text(4, "Blue_safeRingside"); break;
-            // case 7: pros::lcd::set_text(4, "Red Ring Rush"); break;
-            // case 8: pros::lcd::set_text(4, "Blue Ring Rush"); break;
-            // case 9: pros::lcd::set_text(4, "Skills"); break;
-            default: pros::lcd::set_text(4, "Default Auton"); break;
-        }
+        if (Sensor::autonSwitch.get_new_press()) { Auton::state++; if (Auton::state >= autonRoutines.size()) Auton::state = 0; }
+        pros::lcd::set_text(4, autonRoutines[Auton::state].first);
     }
 }
 
@@ -283,19 +280,7 @@ void autonomous() {
     pros::Task sorterC([&]() { colorSortV2(getColor(Color::state)); });
     Auton::coords();
     pros::delay(10000000);
-    switch (Auton::state) {
-        case 0: Auton::test(); break;
-        // case 1: soloRed(); break;
-        // case 2: soloBlue(); break;
-        // case 3: redNegQual(); break;
-        // case 4: blueNegQual(); break;
-        // case 5: safeRedNegQual(); break;
-        // case 6: safeBlueNegQual(); break;
-        // case 7: ringRushRed(); break;
-        // case 8: ringRushBlue(); break;
-        // case 9: skills(); break;
-        default: Auton::test(); break;
-    }
+    (Auton::state < autonRoutines.size()) ? autonRoutines[Auton::state].second() : Auton::test();
 }
 
 // <--------------------------------------------------------------- Driver --------------------------------------------------------------->
