@@ -1,7 +1,7 @@
 #include <bits/stdc++.h>
 // #include <iomanip>
 #include "main.h"
-#include "lebron/api.hpp" // IWYU pragma: keep
+#include "genesis/api.hpp" // IWYU pragma: keep
 // #include "liblvgl/lvgl.h"
 // #include "liblvgl/llemu.hpp"
 #include "brainScreenLVGL.h"
@@ -41,19 +41,19 @@ namespace Piston{
 pros::Imu imu(2);
 pros::Rotation horizontalEnc(-16);
 pros::Rotation verticalEnc(-15);
-lebron::TrackingWheel vertical_tracking_wheel(&verticalEnc, lebron::Omniwheel::NEW_2 , 0.9); // Single
-lebron::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.2); // Double Stacked
+genesis::TrackingWheel vertical_tracking_wheel(&verticalEnc, genesis::Omniwheel::NEW_2 , 0.9); // Single
+genesis::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.2); // Double Stacked
 
 // drivetrain settings
-lebron::Drivetrain drivetrain(&leftMotors, // left motor group
+genesis::Drivetrain drivetrain(&leftMotors, // left motor group
                               &rightMotors, // right motor group
                               11.5, // 11.5 inch track width
-                              lebron::Omniwheel::NEW_325, // using new 3.25" omnis
+                              genesis::Omniwheel::NEW_325, // using new 3.25" omnis
                               450, // drivetrain rpm is 450
                               2 // horizontal drift is 2. If we had traction wheels, it would have been 8
 );
 
-lebron::ControllerSettings linearController (8, // proportional gain (kP)
+genesis::ControllerSettings linearController (8, // proportional gain (kP)
                                              0, // integral gain (kI)
                                              5, // derivative gain (kD)
                                              3, // anti windup
@@ -64,7 +64,7 @@ lebron::ControllerSettings linearController (8, // proportional gain (kP)
                                              5 // maximum acceleration (slew)
 );
 
-lebron::ControllerSettings angularController (3, // proportional gain (kP)
+genesis::ControllerSettings angularController (3, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               15, // derivative gain (kD)
                                               3, // anti windup
@@ -76,7 +76,7 @@ lebron::ControllerSettings angularController (3, // proportional gain (kP)
 );
 
 // sensors for odometry
-lebron::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
+genesis::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
                             nullptr, // vertical tracking wheel 2, set to nullptr as we don't have a second one
                             &horizontal_tracking_wheel, // horizontal tracking wheel
                             nullptr, // horizontal tracking wheel 2, set to nullptr as we don't have a second one
@@ -84,19 +84,19 @@ lebron::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
 );
 
 // input curve for throttle input during driver control
-lebron::ExpoDriveCurve throttleCurve(1, // joystick deadband out of 127
+genesis::ExpoDriveCurve throttleCurve(1, // joystick deadband out of 127
                                      0, // minimum output where drivetrain will move out of 127
                                      1 // expo curve gain
 );
 
 // input curve for steer input during driver control
-lebron::ExpoDriveCurve steerCurve(1, // joystick deadband out of 127
+genesis::ExpoDriveCurve steerCurve(1, // joystick deadband out of 127
                                   0, // minimum output where drivetrain will move out of 127
                                   1 // expo curve gain
 );
 
 // create the chassis
-lebron::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
+genesis::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
 const int DELAY_TIME = 10;
 
 namespace Misc{

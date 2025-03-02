@@ -2,18 +2,18 @@
 
 ## General
 
-```{doxygenfunction} lebron::update
+```{doxygenfunction} genesis::update
 ```
 
-```{doxygenfunction} lebron::init
+```{doxygenfunction} genesis::init
 ```
 
 
 ## Pose
 
-```{doxygenclass} lebron::Pose
+```{doxygenclass} genesis::Pose
 :members:
 ```
 
-```{doxygenfunction} lebron::format_as
+```{doxygenfunction} genesis::format_as
 ```

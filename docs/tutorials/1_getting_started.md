@@ -23,19 +23,19 @@ After the toolchain has been installed, you can create a new PROS project. Selec
 
 To install clangd, repeat the steps to install the PROS extension, but search up `clangd` instead of `PROS`. After it has been installed, open the `main.cpp` file in your project. A notification from clangd will appear in the bottom right stating that it needs to install. Click `install` and wait for it to finish installing. If the notification does not appear, ensure you have clangd installed and reopen `main.cpp`. You have now installed clangd!
 
-## lebron Installation
+## genesis Installation
 
-To install lebron, first need to open the PROS integrated terminal. This can be done by clicking on the PROS icon on the left of the screen and clicking `integrated terminal`
+To install genesis, first need to open the PROS integrated terminal. This can be done by clicking on the PROS icon on the left of the screen and clicking `integrated terminal`
 
-Then, copy/paste the following commands into your command line. This will tell PROS where it can find lebron, and to apply the latest version of lebron to your project:
+Then, copy/paste the following commands into your command line. This will tell PROS where it can find genesis, and to apply the latest version of genesis to your project:
 ```
-pros c add-depot lebron https://raw.githubusercontent.com/lebron/lebron/depot/stable.json # adds lebron's stable depot
-pros c apply lebron # applies latest stable version of lebron
+pros c add-depot genesis https://raw.githubusercontent.com/genesis/genesis/depot/stable.json # adds genesis's stable depot
+pros c apply genesis # applies latest stable version of genesis
 ```
 
 finally, put this at the top of your main.cpp file
 ```c++
-#include "lebron/api.hpp" // IWYU pragma: keep
+#include "genesis/api.hpp" // IWYU pragma: keep
 ```
 
 ```{note}
@@ -43,7 +43,7 @@ The `// IWYU pragma: keep` comment is there to prevent unhelpful unused include 
 ```
 
 ```{tip}
-View the [example project](https://github.com/lebron/lebron/blob/stable/src/main.cpp) if you need more context for setup
+View the [example project](https://github.com/genesis/genesis/blob/stable/src/main.cpp) if you need more context for setup
 ```
 
-You've now installed lebron, and you're ready to configure your robot!
+You've now installed genesis, and you're ready to configure your robot!

@@ -1,7 +1,7 @@
 # 3 - Driver Control
 
 ```{tip}
-View the [example project](https://github.com/lebron/lebron/blob/stable/src/main.cpp) if you need more context for setup
+View the [example project](https://github.com/genesis/genesis/blob/stable/src/main.cpp) if you need more context for setup
 ```
 
 ## Introduction
@@ -88,7 +88,7 @@ For example, if the steering input and throttle input are both maxed out at 127,
 This means the drive won't move forward at full speed, nor will it turn at full speed. 
 This can be undesired behavior, as you may want steering to be consistent, no matter what throttle you provide.
 
-Luckily, lebron provides you the authority to choose your desired behavior through the `desaturateBias` param.
+Luckily, genesis provides you the authority to choose your desired behavior through the `desaturateBias` param.
 `desaturateBias` has a range of 0 to 1, and only has an effect if motor output would be above 127.
 If set to 0, steering will be reduced until the motor output is below 127, leaving throttle alone, and vice versa for a value 1.
 The default is 0.5, where steering and throttle have the same priority. 
@@ -173,7 +173,7 @@ Tank control only uses the throttle curve, it does not use the steer curve
 ```
 
 ```{seealso}
-[Detailed explanation in Vex Forum](https://www.vexforum.com/t/expo-drive-lebrons-implementation/123337)
+[Detailed explanation in Vex Forum](https://www.vexforum.com/t/expo-drive-genesiss-implementation/123337)
 ```
 
 Making precise movements is difficult. If only there was a way make it less sensitive, but not limit the maximum speed. Well, there is a way, and it's called input scaling.
@@ -189,19 +189,19 @@ Instead of the regular linear relationship between controller input and drivetra
 
 ```cpp
 // input curve for throttle input during driver control
-lebron::ExpoDriveCurve throttle_curve(3, // joystick deadband out of 127
+genesis::ExpoDriveCurve throttle_curve(3, // joystick deadband out of 127
                                      10, // minimum output where drivetrain will move out of 127
                                      1.019 // expo curve gain
 );
 
 // input curve for steer input during driver control
-lebron::ExpoDriveCurve steer_curve(3, // joystick deadband out of 127
+genesis::ExpoDriveCurve steer_curve(3, // joystick deadband out of 127
                                   10, // minimum output where drivetrain will move out of 127
                                   1.019 // expo curve gain
 );
 
 // create the chassis
-lebron::Chassis chassis(drivetrain,
+genesis::Chassis chassis(drivetrain,
                         lateral_controller,
                         angular_controller,
                         sensors,

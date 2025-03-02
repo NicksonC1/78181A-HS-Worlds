@@ -1,7 +1,7 @@
 # 8 - Motion Chaining
 
 ```{tip}
-View the [example project](https://github.com/lebron/lebron/blob/stable/src/main.cpp) if you need more context for setup
+View the [example project](https://github.com/genesis/genesis/blob/stable/src/main.cpp) if you need more context for setup
 ```
 
 ## Introduction
@@ -51,7 +51,7 @@ Once the error is below `earlyExitRange`, the motion will automatically exit and
 ```cpp
 void intakeBall() {
     chassis.setPose(0, 0, 0);
-    lebron::Pose intakeBallTarget(0, 24);
+    genesis::Pose intakeBallTarget(0, 24);
 
     // spin intake
     intake();

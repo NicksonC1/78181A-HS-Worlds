@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'lebron'
+project = 'genesis'
 copyright = '2024, Liam Teale'
 author = 'Liam Teale'
 
@@ -32,7 +32,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 html_theme = "furo"
 
 html_theme_options = {
-    "source_repository": "https://github.com/lebron/lebron/",
+    "source_repository": "https://github.com/genesis/genesis/",
     "source_branch": "master",
     "source_directory": "docs/",
 
@@ -51,15 +51,15 @@ html_theme_options = {
 html_static_path = ['_static']
 
 
-breathe_projects = {"lebron": "xml/"}
+breathe_projects = {"genesis": "xml/"}
 
 breathe_projects_source = {
-    "lebron" : (
-        "../", ["include/lebron", "include/lebron/chassis"]
+    "genesis" : (
+        "../", ["include/genesis", "include/genesis/chassis"]
     )
 }
 
-breathe_default_project = "lebron"
+breathe_default_project = "genesis"
 
 myst_enable_extensions = [
     "amsmath",

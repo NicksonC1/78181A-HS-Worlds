@@ -2,38 +2,38 @@
 
 ## Timer
 
-```{doxygenclass} lebron::Timer
+```{doxygenclass} genesis::Timer
 :members:
 ```
 
 ## PID
 
-```{doxygenclass} lebron::PID
+```{doxygenclass} genesis::PID
 :members:
 ```
 
 ## Misc
 
-```{doxygenfunction} lebron::slew
+```{doxygenfunction} genesis::slew
 ```
 
-```{doxygenfunction} lebron::radToDeg
+```{doxygenfunction} genesis::radToDeg
 ```
 
-```{doxygenfunction} lebron::degToRad
+```{doxygenfunction} genesis::degToRad
 ```
 
-```{doxygenfunction} lebron::sanitizeAngle
+```{doxygenfunction} genesis::sanitizeAngle
 ```
 
-```{doxygenfunction} lebron::angleError
+```{doxygenfunction} genesis::angleError
 ```
 
-```{doxygenfunction} lebron::avg
+```{doxygenfunction} genesis::avg
 ```
 
-```{doxygenfunction} lebron::ema
+```{doxygenfunction} genesis::ema
 ```
 
-```{doxygenfunction} lebron::getCurvature
+```{doxygenfunction} genesis::getCurvature
 ```

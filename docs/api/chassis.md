@@ -2,67 +2,67 @@
 
 ## Chassis
 
-```{doxygenclass} lebron::Chassis
+```{doxygenclass} genesis::Chassis
 :members:
 ```
 
 ## Movement Options
 
-```{doxygenstruct} lebron::TurnToPointParams
+```{doxygenstruct} genesis::TurnToPointParams
 :members:
 ```
 
-```{doxygenstruct} lebron::TurnToHeadingParams
+```{doxygenstruct} genesis::TurnToHeadingParams
 :members:
 ```
 
-```{doxygenstruct} lebron::SwingToPointParams
+```{doxygenstruct} genesis::SwingToPointParams
 :members:
 ```
 
-```{doxygenstruct} lebron::SwingToHeadingParams
+```{doxygenstruct} genesis::SwingToHeadingParams
 :members:
 ```
 
-```{doxygenstruct} lebron::MoveToPoseParams
+```{doxygenstruct} genesis::MoveToPoseParams
 :members:
 ```
 
-```{doxygenstruct} lebron::MoveToPointParams
+```{doxygenstruct} genesis::MoveToPointParams
 :members:
 ```
 
 ## Builder Classes
 
-```{doxygenclass} lebron::TrackingWheel
+```{doxygenclass} genesis::TrackingWheel
 :members:
 ```
 
-```{doxygenclass} lebron::OdomSensors
+```{doxygenclass} genesis::OdomSensors
 :members:
 ```
 
-```{doxygennamespace} lebron::Omniwheel
+```{doxygennamespace} genesis::Omniwheel
 ```
 
-```{doxygenclass} lebron::Drivetrain
+```{doxygenclass} genesis::Drivetrain
 :members:
 ```
 
-```{doxygenclass} lebron::ControllerSettings
+```{doxygenclass} genesis::ControllerSettings
 :members:
 ```
 
 <!--TODO: figure out whether this should be documented or not-->
 
-```{doxygenclass} lebron::ExitCondition
+```{doxygenclass} genesis::ExitCondition
 :members:
 ```
 
-```{doxygenclass} lebron::DriveCurve
+```{doxygenclass} genesis::DriveCurve
 :members:
 ```
 
-```{doxygenclass} lebron::ExpoDriveCurve
+```{doxygenclass} genesis::ExpoDriveCurve
 :members:
 ```

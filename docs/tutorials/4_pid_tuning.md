@@ -1,12 +1,12 @@
 # 4 - PID Tuning
 
 ```{tip}
-View the [example project](https://github.com/lebron/lebron/blob/stable/src/main.cpp) if you need more context for setup
+View the [example project](https://github.com/genesis/genesis/blob/stable/src/main.cpp) if you need more context for setup
 ```
 
 ## Introduction
 
-PIDs are used in the majority of motion algorithms in lebron. There are 2 PID Controllers used by lebron: one for lateral motion, and one for angular motion. This tutorial will focus on tuning those PIDs.
+PIDs are used in the majority of motion algorithms in genesis. There are 2 PID Controllers used by genesis: one for lateral motion, and one for angular motion. This tutorial will focus on tuning those PIDs.
 
 ## What is a PID?
 
@@ -25,7 +25,7 @@ A PID is a controller. It controls a mechanism. It takes a numerical input, and 
 Here is the PID settings we copy/pasted earlier:
 
 ```cpp
-lebron::ControllerSettings angular_controller(2, // proportional gain (kP)
+genesis::ControllerSettings angular_controller(2, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               10, // derivative gain (kD)
                                               3, // anti windup
@@ -42,7 +42,7 @@ lebron::ControllerSettings angular_controller(2, // proportional gain (kP)
 kP and kD is the most important settings, they are responsible for the majority of the movement. To tune them, we will start by disabling all other settings:
 
 ```cpp
-lebron::ControllerSettings angular_controller(2, // proportional gain (kP)
+genesis::ControllerSettings angular_controller(2, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               10, // derivative gain (kD)
                                               0, // anti windup
@@ -116,7 +116,7 @@ Since there is no use case for angular acceleration limiting except in extreme s
 Here is the PID settings we copy/pasted earlier:
 
 ```cpp
-lebron::ControllerSettings lateral_controller(10, // proportional gain (kP)
+genesis::ControllerSettings lateral_controller(10, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               3, // derivative gain (kD)
                                               3, // anti windup
@@ -133,7 +133,7 @@ lebron::ControllerSettings lateral_controller(10, // proportional gain (kP)
 kP and kD is the most important settings, they are responsible for the majority of the movement. To tune them, we will start by disabling all other settings:
 
 ```cpp
-lebron::ControllerSettings lateral_controller(10, // proportional gain (kP)
+genesis::ControllerSettings lateral_controller(10, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               3, // derivative gain (kD)
                                               0, // anti windup
@@ -153,7 +153,7 @@ To tune the PID, use this flowchart. Repeat until no amount of kD stops the robo
 When this process is finished, use the found values in the settings and restore the disabled gains:
 
 ```cpp
-lebron::ControllerSettings lateral_controller(10, // proportional gain (kP)
+genesis::ControllerSettings lateral_controller(10, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               3, // derivative gain (kD)
                                               3, // anti windup
@@ -256,7 +256,7 @@ The other 2 timeouts are used when the robot is close to the target. There is a 
 These exit conditions are tuned in the PID settings constructor. See the code example below: 
 
 ```cpp
-lebron::ControllerSettings lateral_controller(10, // proportional gain (kP)
+genesis::ControllerSettings lateral_controller(10, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               3, // derivative gain (kD)
                                               3, // anti windup

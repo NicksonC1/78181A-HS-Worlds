@@ -1,7 +1,7 @@
 {
   "py/object": "pros.conductor.project.Project",
   "py/state": {
-    "project_name": "78181A-PAS-F",
+    "project_name": "78181A Worlds",
     "target": "v5",
     "templates": {
       "kernel": {
@@ -80,7 +80,7 @@
     },
     "upload_options": {
       "slot": 1,
-      "description": "78181A PAS Code",
+      "description": "Official Code for 78181A Genesis",
       "icon": "planet"
     },
     "use_early_access": false

@@ -5,9 +5,9 @@
 #include <string>
 // #include <iomanip>
 #include "main.h"
-#include "lebron/api.hpp" // IWYU pragma: keep
-// #include "liblvgl/lvgl.h"
-// #include "liblvgl/llemu.hpp"
+#include "genesis/api.hpp" // IWYU pragma: keep
+#include "liblvgl/lvgl.h" //.
+#include "liblvgl/llemu.hpp" //.
 #include "brainScreenLVGL.h"
 #include "pros/motors.h"
 #include "pros/rtos.hpp"
@@ -46,19 +46,19 @@ namespace Piston{
 pros::Imu imu(2);
 pros::Rotation horizontalEnc(-16);
 pros::Rotation verticalEnc(-15);
-lebron::TrackingWheel vertical_tracking_wheel(&verticalEnc, lebron::Omniwheel::NEW_2 , 0.9); // Single
-lebron::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.2); // Double Stacked
+genesis::TrackingWheel vertical_tracking_wheel(&verticalEnc, genesis::Omniwheel::NEW_2 , 0.9); // Single
+genesis::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.2); // Double Stacked
 
 // <---------------------------------------------------------------- Config ---------------------------------------------------------------->
-lebron::Drivetrain drivetrain(&leftMotors, // left motor group
+genesis::Drivetrain drivetrain(&leftMotors, // left motor group
                               &rightMotors, // right motor group
                               11.5, // 11.5 inch track width
-                              lebron::Omniwheel::NEW_325, // using new 3.25" omnis
+                              genesis::Omniwheel::NEW_325, // using new 3.25" omnis
                               450, // drivetrain rpm is 450
                               2 // horizontal drift is 2. If we had traction wheels, it would have been 8
 );
 
-lebron::ControllerSettings linearController (8, // proportional gain (kP)
+genesis::ControllerSettings linearController(8, // proportional gain (kP)
                                              0, // integral gain (kI)
                                              5, // derivative gain (kD)
                                              3, // anti windup
@@ -69,7 +69,7 @@ lebron::ControllerSettings linearController (8, // proportional gain (kP)
                                              5 // maximum acceleration (slew)
 );
 
-lebron::ControllerSettings angularController (3, // proportional gain (kP)
+genesis::ControllerSettings angularController(3, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               15, // derivative gain (kD)
                                               3, // anti windup
@@ -81,7 +81,7 @@ lebron::ControllerSettings angularController (3, // proportional gain (kP)
 );
 
 // sensors for odometry
-lebron::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
+genesis::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
                             nullptr, // vertical tracking wheel 2, set to nullptr as we don't have a second one
                             &horizontal_tracking_wheel, // horizontal tracking wheel
                             nullptr, // horizontal tracking wheel 2, set to nullptr as we don't have a second one
@@ -89,19 +89,19 @@ lebron::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
 );
 
 // input curve for throttle input during driver control
-lebron::ExpoDriveCurve throttleCurve(1, // joystick deadband out of 127
+genesis::ExpoDriveCurve throttleCurve(1, // joystick deadband out of 127
                                      0, // minimum output where drivetrain will move out of 127
                                      1 // expo curve gain
 );
 
 // input curve for steer input during driver control
-lebron::ExpoDriveCurve steerCurve(1, // joystick deadband out of 127
+genesis::ExpoDriveCurve steerCurve(1, // joystick deadband out of 127
                                   0, // minimum output where drivetrain will move out of 127
                                   1 // expo curve gain
 );
 
 // create the chassis
-lebron::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
+genesis::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
 
 std::vector<std::pair<float, float>> points;
 
@@ -120,7 +120,7 @@ namespace Misc{
         leftMotors.brake();
         rightMotors.brake();
     }
-    void curve(std::vector<std::pair<float, float>>& waypoints, int angular = 450, int lateral = 2300){
+    void chain(std::vector<std::pair<float, float>>& waypoints, int angular = 450, int lateral = 2300){
         while(!waypoints.empty()){
             std::pair<int, int> target = waypoints.front();
             chassis.turnToPoint(target.first,target.second,angular,{.minSpeed = 10,.earlyExitRange = 2});
@@ -129,17 +129,21 @@ namespace Misc{
             waypoints.erase(waypoints.begin());
         }
     }
-    void linear(double dist, int timeout, lebron::MoveToPointParams p = {}, bool async = true){
-        lebron::Pose pose = chassis.getPose(true);
+    void linear(double dist, int timeout, genesis::MoveToPointParams p = {}, bool async = true){
+        genesis::Pose pose = chassis.getPose(true);
         dist < 0 ? p.forwards = false : p.forwards = true;
         chassis.moveToPoint(
         pose.x + std::sin(pose.theta) * dist,
         pose.y + std::cos(pose.theta) * dist,
-        timeout,
-        p,
-        async);
+        timeout, p, async);
         // https://github.com/DHRA-2131/2024-25-2131H/blob/010ce1434e415ad07cc6ba06149c97fcf4c29a76/Rewrite%203/include/2131H/Systems/Chassis.hpp#L13
     }
+    // void driver(bool mode, int I, int C, int deadband){
+    //     double mL, mR, ret = 0;
+    //     if(mode){ ret = (std::exp(-C/10)+std::exp((std::abs(I)-100)/10)(1-std::exp(-C/10))) I; }
+
+    //     chassis.arcade(mL,mR);
+    // }
 } // namespace Misc
 
 // <-------------------------------------------------------------- Lady Brown ------------------------------------------------------------>
@@ -230,7 +234,7 @@ namespace Auton{
         points.emplace_back(-24,24);
         points.emplace_back(-7,41);
         points.emplace_back(24,48);
-        Misc::curve(points); // vec, angular timeout, lateral timeout
+        Misc::chain(points); // vec, angular timeout, lateral timeout
     }
     void linear(){
         Misc::linear(24,2000,{.forwards = true,.maxSpeed = 127,.minSpeed = 10,.earlyExitRange = 2});
@@ -255,7 +259,10 @@ Color::colorVals getColor(bool colorValV3) { return colorValV3 ? Color::colorVal
 
 // <------------------------------------------------------------ Initialize --------------------------------------------------------------->
 void initialize() {
-    pros::lcd::initialize();
+    lv_obj_t *mainscreen;
+    LV_IMG_DECLARE(logo);
+    // pros::lcd::initialize();
+    lvgl_init();
     pros::Task t_Select(autonSelectSwitch);
     pros::Task liftC([]{ while (1) { Lift::move(); pros::delay(Misc::DELAY); } });
     chassis.setPose(0, 0, 0);
@@ -263,14 +270,16 @@ void initialize() {
     Motor::intakeB.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     Sensor::colorSort.set_led_pwm(100);
-    pros::Task screenTask([&]() {
-        while (1) {
-            pros::lcd::print(0, "X: %f", chassis.getPose().x);
-            pros::lcd::print(1, "Y: %f", chassis.getPose().y);
-            pros::lcd::print(2, "Theta: %f", chassis.getPose().theta);
-            pros::delay(50);
-        }
-    });
+    lv_img_set_src(mainscreen, &logo);
+    // lv_img_set_src(main, &logo);
+    // pros::Task screenTask([&]() {
+    //     while (1) {
+    //         pros::lcd::print(0, "X: %f", chassis.getPose().x);
+    //         pros::lcd::print(1, "Y: %f", chassis.getPose().y);
+    //         pros::lcd::print(2, "Theta: %f", chassis.getPose().theta);
+    //         pros::delay(50);
+    //     }
+    // });
 }
 void disabled() {}
 void competition_initialize() {}

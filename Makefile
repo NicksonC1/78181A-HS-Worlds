@@ -25,7 +25,7 @@ EXCLUDE_COLD_LIBRARIES:=
 
 # Set this to 1 to add additional rules to compile your project as a PROS library template
 IS_LIBRARY:=1
-LIBNAME:=lebron
+LIBNAME:=genesis
 VERSION:=0.5.5
 
 # EXCLUDE_SRC_FROM_LIB= $(SRCDIR)/unpublishedfile.c
@@ -36,7 +36,7 @@ EXCLUDE_SRC_FROM_LIB+=$(foreach file, $(SRCDIR)/main,$(foreach cext,$(CEXTS),$(f
 # whatever files you want here. This line is configured to add all header files
 # that are in the the include directory get exported
 
-TEMPLATE_FILES=$(INCDIR)/lebron/*.hpp $(INCDIR)/lebron/logger/*.hpp $(INCDIR)/lebron/chassis/*.hpp $(INCDIR)/fmt/*.h $(INCDIR)/fmt/LICENSE $(FWDIR)/hot-cold-asset.mk $(ROOT)/static/example.txt $(INCDIR)/lebron/LICENSE $(INCDIR)/lebron/README.md $(INCDIR)/lebron/VERSION
+TEMPLATE_FILES=$(INCDIR)/genesis/*.hpp $(INCDIR)/genesis/logger/*.hpp $(INCDIR)/genesis/chassis/*.hpp $(INCDIR)/fmt/*.h $(INCDIR)/fmt/LICENSE $(FWDIR)/hot-cold-asset.mk $(ROOT)/static/example.txt $(INCDIR)/genesis/LICENSE $(INCDIR)/genesis/README.md $(INCDIR)/genesis/VERSION
 
 .DEFAULT_GOAL=quick
 
