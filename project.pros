@@ -1,7 +1,7 @@
 {
   "py/object": "pros.conductor.project.Project",
   "py/state": {
-    "project_name": "78181A Worlds",
+    "project_name": "Worlds",
     "target": "v5",
     "templates": {
       "kernel": {

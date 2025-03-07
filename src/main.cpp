@@ -257,12 +257,18 @@ void autonSelectSwitch() {
 
 Color::colorVals getColor(bool colorValV3) { return colorValV3 ? Color::colorVals::RED : Color::colorVals::BLUE; } // Sort ? Red : Blue
 
+LV_IMG_DECLARE(tdbg);
+LV_IMG_DECLARE(logo);
+
+lv_obj_t * sbg = lv_img_create(lv_scr_act());
+lv_obj_t * slogo = lv_img_create(lv_scr_act());
+
 // <------------------------------------------------------------ Initialize --------------------------------------------------------------->
 void initialize() {
-    lv_obj_t *mainscreen;
-    LV_IMG_DECLARE(logo);
-    // pros::lcd::initialize();
-    lvgl_init();
+    lv_img_set_src(sbg, &tdbg);
+	lv_obj_set_pos(sbg,0,0);
+	lv_img_set_src(slogo, &logo);
+	lv_obj_set_pos(slogo,105,-15);
     pros::Task t_Select(autonSelectSwitch);
     pros::Task liftC([]{ while (1) { Lift::move(); pros::delay(Misc::DELAY); } });
     chassis.setPose(0, 0, 0);
@@ -270,8 +276,7 @@ void initialize() {
     Motor::intakeB.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     Sensor::colorSort.set_led_pwm(100);
-    lv_img_set_src(mainscreen, &logo);
-    // lv_img_set_src(main, &logo);
+    Sensor::colorSort.set_integration_time(10);
     // pros::Task screenTask([&]() {
     //     while (1) {
     //         pros::lcd::print(0, "X: %f", chassis.getPose().x);
