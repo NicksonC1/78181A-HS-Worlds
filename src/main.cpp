@@ -17,36 +17,36 @@
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
 // DriveTrain
-pros::MotorGroup leftMotors({-1, -2, -3}, pros::MotorGearset::blue);
-pros::MotorGroup rightMotors({4, 5, 6}, pros::MotorGearset::blue); 
+pros::MotorGroup leftMotors({-100, -100, -100}, pros::MotorGearset::blue);
+pros::MotorGroup rightMotors({100, 100, 100}, pros::MotorGearset::blue); 
 
 namespace Motor{
-    pros::Motor intakeB(7, pros::MotorGearset::blue);
-    pros::Motor intakeT(8, pros::MotorGearset::blue);
-    pros::Motor lb(9, pros::MotorGearset::blue);
+    pros::Motor intakeB(9, pros::MotorGearset::blue);
+    pros::Motor intakeT(-4, pros::MotorGearset::blue);
+    pros::Motor lb(100, pros::MotorGearset::green);
 } // namespace Motor
 
 namespace Sensor{
-    pros::Rotation lbR(10);
-    pros::Distance lbD(11); // Del
-    pros::Optical colorSort(12);
-    pros::adi::DigitalIn autonSwitch('A');
+    pros::Rotation lbR(100);
+    pros::Distance lbD(100); // Del
+    pros::Optical colorSort(100);
+    pros::adi::DigitalIn autonSwitch('Z');
 } // namspace Sensor
 
 namespace Piston{
-    pros::adi::DigitalOut lightsaberL('B');
-    pros::adi::DigitalOut lightsaberR('C');
-    pros::adi::DigitalOut intake('D');
-    pros::adi::DigitalOut mogo('E');
-    pros::adi::DigitalOut sorter('F');
-    pros::adi::DigitalOut pto('G');
+    pros::adi::DigitalOut lightsaberL('Z');
+    pros::adi::DigitalOut lightsaberR('Z');
+    pros::adi::DigitalOut intake('Z');
+    pros::adi::DigitalOut mogo('Z');
+    pros::adi::DigitalOut sorter('Z');
+    pros::adi::DigitalOut pto('Z');
 } // namespace Piston
 
 // <------------------------------------------------------------- Odom Sensors ------------------------------------------------------------->
-pros::Imu imu(2);
-pros::Rotation horizontalEnc(-16);
-pros::Rotation verticalEnc(-15);
-genesis::TrackingWheel vertical_tracking_wheel(&verticalEnc, genesis::Omniwheel::NEW_2 , 0.9); // Single
+pros::Imu imu(100);
+pros::Rotation horizontalEnc(-100);
+pros::Rotation verticalEnc(-100);
+genesis::TrackingWheel vertical_tracking_wheel(&verticalEnc, genesis::Omniwheel::NEW_2 , -0.9); // Single
 genesis::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.2); // Double Stacked
 
 // <---------------------------------------------------------------- Config ---------------------------------------------------------------->
@@ -241,6 +241,42 @@ namespace Auton{
     }
 } // namespace Auton
 
+namespace Driver{
+    bool b_mogo = false, b_pto = false;
+    void joystick(){
+        while(1){
+            int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
+            int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
+            chassis.arcade(leftY, rightX);
+            pros::delay(Misc::DELAY);
+        }
+    }
+    void intake(){
+        while(1){
+            if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) { Motor::intakeT.move(127); Motor::intakeB.move(127);  }
+            else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) { Motor::intakeT.move(-127); Motor::intakeB.move(-127); }
+            else{ Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST); Motor::intakeB.set_brake_mode(pros::E_MOTOR_BRAKE_COAST); Motor::intakeB.brake(); Motor::intakeT.brake(); }
+            pros::delay(Misc::DELAY);
+        }
+    }
+    void ladyBrown(){
+        while(1){
+            
+            pros::delay(Misc::DELAY);
+        }
+    }
+    void piston(){
+        while(1){
+            if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)) { Misc::togglePiston(Piston::mogo, b_mogo); }
+            if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) { Misc::togglePiston(Piston::pto, b_pto); } // Testing | Del 
+            (controller.get_digital(pros::E_CONTROLLER_DIGITAL_LEFT)) ? Piston::lightsaberL.set_value(true) : Piston::lightsaberL.set_value(false);
+            (controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT)) ? Piston::lightsaberR.set_value(true) : Piston::lightsaberR.set_value(false);
+            (controller.get_digital(pros::E_CONTROLLER_DIGITAL_A)) ? Piston::intake.set_value(true) : Piston::intake.set_value(false);
+            pros::delay(Misc::DELAY);
+        }
+    }
+} // namespace Driver
+
 using AutonFunc = void(*)();
 std::vector<std::pair<std::string, AutonFunc>> autonRoutines = {
     {"Default Auton", Auton::test},
@@ -273,8 +309,8 @@ void initialize() {
     pros::Task liftC([]{ while (1) { Lift::move(); pros::delay(Misc::DELAY); } });
     chassis.setPose(0, 0, 0);
     chassis.calibrate(); 
-    Motor::intakeB.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+    Motor::intakeB.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     Sensor::colorSort.set_led_pwm(100);
     Sensor::colorSort.set_integration_time(10);
     // pros::Task screenTask([&]() {
@@ -300,27 +336,19 @@ void autonomous() {
 // <--------------------------------------------------------------- Driver --------------------------------------------------------------->
 void opcontrol() {
     pros::Task sorterC([&]() { colorSortV2(getColor(Color::state)); });
-    bool b_mogo = false, b_pto = false;
+    pros::Task driverTask(Driver::joystick);
+    pros::Task intakeTask(Driver::intake);
+    pros::Task ladyBrownTask(Driver::ladyBrown);
+    pros::Task pistonTask(Driver::piston);
 	leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST);
 	rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST);
     Sensor::lbR.reset_position();
     while(1) {
-        int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
-        int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
-        chassis.arcade(leftY, rightX);
-		if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)) { Misc::togglePiston(Piston::mogo, b_mogo); }
-        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) { Misc::togglePiston(Piston::pto, b_pto); } // Testing | Del 
-		(controller.get_digital(pros::E_CONTROLLER_DIGITAL_LEFT)) ? Piston::lightsaberL.set_value(true) : Piston::lightsaberL.set_value(false);
-        (controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT)) ? Piston::lightsaberR.set_value(true) : Piston::lightsaberR.set_value(false);
-        (controller.get_digital(pros::E_CONTROLLER_DIGITAL_A)) ? Piston::intake.set_value(true) : Piston::intake.set_value(false);
-        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) { Motor::intakeB.move(127); Motor::intakeT.move(-127); }
-        else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) { Motor::intakeB.move(-127); Motor::intakeT.move(-127); }
-        else{ Motor::intakeB.brake(); Motor::intakeT.brake(); }
-        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) { Lift::curr++; }
-        else if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)) { Lift::curr--; }
-        if(Lift::curr > Lift::STATES.size()) { Lift::curr = 0;}
-        Lift::setState(Lift::STATES[Lift::curr]);
-        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)) Hang::move(1500,100);
+        // if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) { Lift::curr++; }
+        // else if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)) { Lift::curr--; }
+        // if(Lift::curr > Lift::STATES.size()) { Lift::curr = 0;}
+        // Lift::setState(Lift::STATES[Lift::curr]);
+        // if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)) Hang::move(1500,100);
         pros::delay(Misc::DELAY);
     }
 }
