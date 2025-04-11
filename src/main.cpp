@@ -156,8 +156,8 @@ namespace LiftSeven {
     double lift_kp_up = 1.4, lift_kp_down = 1.1, lift_kd = 0;
     static double lastError = 0, lastTime = pros::millis();
 
-    void setState(int newState) {
-        lift_state = newState;
+    void setState(int newTarget) {
+        lift_state = newTarget; // should be something like lift target
         autonomousMode = true;
         std::cout << "[Auto] SetState called: Lift state = " << lift_state << std::endl;
     }
@@ -234,29 +234,25 @@ namespace LiftSeven {
 } // namespace LiftSeven
 
 // <------------------------------------------------------------- Color Sort ------------------------------------------------------------->
-namespace Color{
-    enum class colorVals{ BLUE, RED };
-    constexpr bool sRed = true; // True: Sort Red  Color::sRed;
-    constexpr bool sBlue = false; // False: Sort Blue Color::sBlue;
-    bool state = false, rs = false;
+namespace Color {
+    enum class colorVals { NONE, BLUE, RED };
+    constexpr int DIST_VAL = 10;
     constexpr double rLow = 10.0, rHigh = 50.0, bLow = 164.0, bHigh = 213.5;
-    bool ifSenseRed(int hue) { return (hue > rLow && Sensor::colorSort.get_hue() < rHigh) ?  true : false; }
-    bool ifSenseBlue(int hue) { return (hue > bLow && Sensor::colorSort.get_hue() < bHigh) ? true : false; }
-    void colorSortV2(colorVals input){
-        while(1){
-            int colorV = Sensor::colorSort.get_hue();
-            if(input == colorVals::BLUE && ifSenseBlue(colorV) && !rs){
+    inline bool isRed(double h) { return h > rLow && h < rHigh; }
+    inline bool isBlue(double h) { return h > bLow && h < bHigh; }
+    void colorSort(colorVals input) {
+        colorVals lastColor = colorVals::NONE;
+        while (1) {
+            double hue = Sensor::o_colorSort.get_hue();
+            double dist = Sensor::d_colorSort.get_distance();
+            if (isRed(hue)) lastColor = colorVals::RED;
+            else if (isBlue(hue)) lastColor = colorVals::BLUE;
+            if (lastColor == input && dist < DIST_VAL) {
                 Piston::sorter.set_value(true);
                 pros::delay(350);
-                rs = true;
-            }
-            else if(input == colorVals::RED && ifSenseRed(colorV) && !rs){
-                Piston::sorter.set_value(true);
-                pros::delay(350);
-                rs = true;
-            }
-            else { Piston::sorter.set_value(false); }
-            rs = false;
+                lastColor = colorVals::NONE;
+            } 
+            else Piston::sorter.set_value(false);
             pros::delay(10);
         }
     }
@@ -264,7 +260,7 @@ namespace Color{
 
 // <------------------------------------------------------------- Tier Three ------------------------------------------------------------->
 namespace Hang{
-    const int UNWRAP_TIME = 750, TARGET_POS = 10000;
+    const int UNWRAP_TIME = 750, TARGET_POS = 30;
     void reset(){ Misc::cdrift(127,127,UNWRAP_TIME); }
     void up(int iterE, int cd){ Misc::cdrift(-127,-127,iterE); pros::delay(cd); }
     void iter(int iterE, int cd, int times){ for(int i=0;i<times;i++){ up(iterE,cd); reset(); }}
@@ -275,33 +271,25 @@ namespace Hang{
     }
     void start(){
         Piston::pto.set_value(true);
-        Misc::cdrift(-15,-15,200);
         TaskHandler::colorSort = false;
         TaskHandler::lb = false;
         Motor::lb.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        leftMotors.set_zero_position_all(0.0);
-        rightMotors.set_zero_position_all(0.0);
-        LiftSeven::setState(LiftSeven::HANG);
-        do{
-            leftMotors.move(-127);
-            rightMotors.move(-127);
-        }
-        while(std::abs((leftMotors.get_position() + rightMotors.get_position())/2) < TARGET_POS);
-        LiftSeven::setState(LiftSeven::HANG);
-        reset();
-        do{
-            leftMotors.move(-127);
-            rightMotors.move(-127);
-        }
-        while(std::abs((leftMotors.get_position() + rightMotors.get_position())/2) < TARGET_POS);
-        reset();
-        do{
-            leftMotors.move(-127);
-            rightMotors.move(-127);
-        }
-        while(std::abs((leftMotors.get_position() + rightMotors.get_position())/2) < TARGET_POS);
-        pros::delay(400);
-        Motor::intakeT.move(127);
+        Motor::lb.move(85);
+        pros::delay(450);
+        Motor::lb.move(0);
+        // LiftSeven::setState(LiftSeven::HANG);
+        for(int i = 1; i < 2; i++){
+            do{
+                leftMotors.move(-127);
+                rightMotors.move(-127);
+            }
+            while(Sensor::hang.get_distance() > 20);
+            reset();
+            Motor::lb.move(85);
+            pros::delay(450);
+            Motor::lb.move(0);
+            // LiftSeven::setState(LiftSeven::HANG);
+        }   
     }
 } // namespace Hang
 
@@ -468,7 +456,7 @@ std::vector<std::pair<std::string, AutonFunc>> autonRoutines = {
     {"Skills", Auton::Skills::main}
 };
 
-void autonSelectSwitch() {
+void autonSwitch() {
     while (1) {
         pros::delay(Misc::DELAY);
         if (Sensor::autonSwitch.get_new_press()) { Auton::state++; if (Auton::state >= autonRoutines.size()) Auton::state = 0; }
@@ -510,15 +498,17 @@ void initialize() {
     // pros::Task liftC([]{ while (1) { LiftSeven::lift(); pros::delay(Misc::DELAY); }});
     // pros::Task screenC([]{ while (1) { Screen::update(); pros::delay(100); }});
     Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-    Sensor::colorSort.set_led_pwm(100);
-    Sensor::colorSort.set_integration_time(10);
+    Sensor::o_colorSort.set_led_pwm(100);
+    Sensor::o_colorSort.set_integration_time(10);
 }
 void disabled() {}
 void competition_initialize() {}
 ASSET(example_txt); // PP
 // <------------------------------------------------------------- Autonomous ------------------------------------------------------------->
 void autonomous() {
-    pros::Task sorterC([&]() { if(TaskHandler::colorSort) Color::colorSortV2(getColor(Color::state)); pros::delay(10);});
+    // pros::Task sorterC([&]() { if(TaskHandler::colorSort) Color::colorSort(getColor(Color::state)); pros::delay(10);}); // back
+    pros::Task sorterC([&]() { if(TaskHandler::colorSort) Color::colorSort(Color::colorVals::RED); pros::delay(10);});
+    // Color::colorSort(Color::colorVals::RED);
     Auton::Test::main();
     pros::delay(10000000);
     (Auton::state < autonRoutines.size()) ? autonRoutines[Auton::state].second() : Auton::Test::main();
@@ -526,7 +516,10 @@ void autonomous() {
 
 // <--------------------------------------------------------------- Driver --------------------------------------------------------------->
 void opcontrol() {
-    pros::Task sorterC([&]() { if(TaskHandler::colorSort) Color::colorSortV2(getColor(Color::state)); pros::delay(10);});
+    // Hang::start();
+    // pros::delay(10000000);
+    // pros::Task sorterC([&]() { if(TaskHandler::colorSort) Color::colorSort(getColor(Color::state)); pros::delay(10);}); // back
+    pros::Task sorterC([&]() { if(TaskHandler::colorSort) Color::colorSort(Color::colorVals::RED); pros::delay(10);});
     pros::Task driverTask(Driver::joystick);
     pros::Task intakeTask(Driver::intake);
     pros::Task ladyBrownTask(Driver::ladyBrown);

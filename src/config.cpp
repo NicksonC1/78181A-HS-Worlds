@@ -19,8 +19,9 @@ namespace Motor{
 
 namespace Sensor{
     // pros::Rotation lbR(7);
-    // pros::Distance lbD(100); // Del
-    pros::Optical colorSort(9);
+    pros::Distance hang(5);
+    pros::Optical o_colorSort(9);
+    pros::Optical d_colorSort(100);
     pros::adi::DigitalIn autonSwitch({8,'Z'});
 } // namspace Sensor
 
