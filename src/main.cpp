@@ -147,7 +147,7 @@ namespace LiftSix {
 } // namespace LiftSix
 
 namespace LiftSeven {
-    int lift_state = 0, pressCounter = 0;
+    int lift_state = 0;
     bool autonomousMode = false;
 
     constexpr int RESET = 0, LOAD = 173, SCORE = 950, HANG = 600;
@@ -207,22 +207,19 @@ namespace LiftSeven {
         if (lift_state == 2) {  
             if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
                 Motor::lb.move(127);
-                pressCounter = 0;
                 std::cout << "[Driver] Manual Move UP" << std::endl;
             }
             else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
                 Motor::lb.move(-127);
-                pressCounter++;
                 std::cout << "[Driver] Manual Move DOWN" << std::endl;
                 if (Motor::lb.get_position() < 50) lift_state = 1; // Change to lift_state = 1;
             }
             else {
                 Motor::lb.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
                 Motor::lb.brake();
-                pressCounter = 0;
             }
 
-            if (pressCounter > 40 || Motor::lb.get_position() < 50) lift_state = 0;
+            if (Motor::lb.get_position() < 50) lift_state = 0;
         }
         else autolift();
 
