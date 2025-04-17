@@ -31,6 +31,7 @@ namespace Piston{
     extern pros::adi::DigitalOut mogo;
     extern pros::adi::DigitalOut sorter;
     extern pros::adi::DigitalOut pto;
+    extern pros::adi::DigitalOut release;
 } // namespace Piston
 
 class CustomIMU : public pros::IMU {

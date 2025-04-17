@@ -21,7 +21,7 @@ namespace Sensor{
     // pros::Rotation lbR(7);
     pros::Distance hang(5);
     pros::Optical o_colorSort(9);
-    pros::Optical d_colorSort(100);
+    pros::Optical d_colorSort(10);
     pros::adi::DigitalIn autonSwitch({8,'Z'});
 } // namspace Sensor
 
@@ -33,6 +33,7 @@ namespace Piston{
     pros::adi::DigitalOut mogo({8,'H'}); // checked
     pros::adi::DigitalOut sorter('H'); // checked
     pros::adi::DigitalOut pto('G'); // checked
+    pros::adi::DigitalOut release({8,'A'}); // change later
 } // namespace Piston
 
 // <------------------------------------------------------------- Odom Sensors ------------------------------------------------------------->
