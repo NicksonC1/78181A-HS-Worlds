@@ -21,7 +21,7 @@ namespace Sensor{
     // pros::Rotation lbR(7);
     pros::Distance hang(5);
     pros::Optical o_colorSort(9);
-    pros::Optical d_colorSort(10);
+    pros::Distance d_colorSort(10);
     pros::adi::DigitalIn autonSwitch({8,'Z'});
 } // namspace Sensor
 

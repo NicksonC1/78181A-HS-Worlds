@@ -20,6 +20,7 @@ namespace TaskHandler {
     bool lbD = true;
     bool lbH = false;
     bool autoIntake = true;
+    bool intake = true;
 } // namespace TaskHandler
 
 // <------------------------------------------------------------ Miscellaneous ------------------------------------------------------------>
@@ -79,7 +80,7 @@ namespace Lift{
     int lift_target_position = 0;
     bool autonomousMode = false;
 
-    constexpr int RESET = 0, LOAD = 198, SCORE = 950, HANG = 600; 
+    constexpr int RESET = 0, LOAD = 160, SCORE = 950, HANG = 600; 
     std::vector<int> l_rot_target = {RESET, LOAD, SCORE}; 
 
     double lift_kp_up = 1.0, lift_kp_down = 1.5, lift_kd = 0.0, dM = 1.0;
@@ -189,27 +190,50 @@ namespace Lift{
 namespace Color {
     enum class colorVals { NONE, BLUE, RED };
     colorVals state = colorVals::NONE;
-    constexpr int DIST_VAL = 10;
+    constexpr int MIN_VAL = 150;
     constexpr double rLow = 10.0, rHigh = 50.0, bLow = 164.0, bHigh = 213.5;
+    bool valRange(int input){ if(input > MIN_VAL && input < 225) return true; else return false;}
     inline bool isRed(double h) { return h > rLow && h < rHigh; }
     inline bool isBlue(double h) { return h > bLow && h < bHigh; }
     colorVals colorConvertor(colorVals input){ (input == colorVals::BLUE) ? input : input = colorVals::RED; return input; }
     void colorSort(colorVals input) { // Input refers to color to BE sorted
         colorVals lastColor = colorVals::NONE;
+        Sensor::o_colorSort.set_integration_time(4);
         while (1) {
-            if (isRed(Sensor::o_colorSort.get_hue())) lastColor = colorVals::RED;
-            else if (isBlue(Sensor::o_colorSort.get_hue())) lastColor = colorVals::BLUE;
-            if (lastColor == input && Sensor::d_colorSort.get_distance() < DIST_VAL) {
+            Sensor::o_colorSort.set_led_pwm(100);
+            if (isRed(Sensor::o_colorSort.get_hue()) && (Sensor::o_colorSort.get_proximity() > MIN_VAL && Sensor::o_colorSort.get_proximity() < 256)){
+                controller.rumble(".");
+                lastColor = colorVals::RED; 
+            if(input == lastColor){
+                TaskHandler::intake = false;
                 Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
                 Motor::intakeT.brake();
-                pros::delay(350);
-                Motor::intakeT.move(127);
+                pros::delay(2000);
+                // Motor::intakeT.move(127);
                 Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-                lastColor = colorVals::NONE;
-            } 
-            pros::delay(Misc::DELAY);
+                TaskHandler::intake = true;
+            }
+        }
+            // else if (isBlue(Sensor::o_colorSort.get_hue() && (Sensor::o_colorSort.get_proximity() > MIN_VAL && Sensor::o_colorSort.get_proximity() < 256))) lastColor = colorVals::BLUE;
+            
+        
+            // if(Sensor::d_colorSort.get_distance() < 20) controller.rumble(".");
+            
+            // if (lastColor == input && (Sensor::d_colorSort.get_distance() < 15)) {
+            //     pros::delay(50);
+            //     TaskHandler::intake = false;
+            //     Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
+            //     Motor::intakeT.brake();
+            //     pros::delay(2000);
+            //     // Motor::intakeT.move(127);
+            //     Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+            //     TaskHandler::intake = true;
+            //     lastColor = colorVals::NONE;
+            // } 
+            // pros::delay(Misc::DELAY);
         }
     }
+
     void autoIntake(Color::colorVals input){ // input is color desired to be stored on intake
         colorVals lastColor = colorVals::NONE;
         while(1) {       
@@ -218,7 +242,7 @@ namespace Color {
             if(input == colorVals::BLUE){
                 do{
                     Motor::intakeT.move(127);
-                } while (!(Sensor::d_colorSort.get_distance() < DIST_VAL));
+                } while (!(Sensor::d_colorSort.get_distance() < 15));
                 Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
                 Motor::intakeT.brake();
                 pros::delay(350);//how the ring hovers ontop of intake
@@ -392,7 +416,7 @@ namespace Driver{
         Misc::cdrift(-40,-40,600,false);
     }
     void intake(){
-        while(1){
+        while(TaskHandler::intake){
             if(!Misc::intakeR){
                 if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) { Motor::intakeT.move(127); }
                 else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) { Motor::intakeT.move(-127); }
@@ -433,9 +457,10 @@ namespace Screen {
     void update() {
         controller.clear();  
         pros::delay(500);
+        controller.set_text(1, 0, "distance:" + std::to_string(Sensor::o_colorSort.get_proximity()));
         controller.set_text(0, 0, "Pos: " + std::to_string(Motor::lb.get_position()));
         // controller.set_text(0, 0, "Run Time: " + std::to_string(pros::millis() / 1000) + "s");
-        controller.set_text(1, 0, "Test Text 1");
+        // controller.set_text(1, 0, "Test Text 1");
         controller.set_text(2, 0, "Test Text 2");
         controller.set_text(3, 0, "Drive Left Temp: " + std::to_string(leftMotors.get_temperature()) + "C");
         controller.set_text(4, 0, "Drive Right Temp: " + std::to_string(rightMotors.get_temperature()) + "C");
@@ -503,8 +528,8 @@ void initialize() {
     pros::Task liftC([]{ while (1) { Lift::lift(); pros::delay(Misc::DELAY); }});
     // pros::Task screenC([]{ while (1) { Screen::update(); pros::delay(100); }});
     Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-    Sensor::o_colorSort.set_led_pwm(100);
-    Sensor::o_colorSort.set_integration_time(10);
+    // Sensor::o_colorSort.set_led_pwm(100);
+    // Sensor::o_colorSort.set_integration_time(10);
 }
 void disabled() {}
 void competition_initialize() {}
@@ -512,20 +537,23 @@ ASSET(example_txt); // PP
 
 // <------------------------------------------------------------- Autonomous ------------------------------------------------------------->
 void autonomous() {
-    pros::Task sorterC([&](){ if(TaskHandler::colorSort) Color::colorSort(Color::state); pros::delay(Misc::DELAY); });
-    pros::Task autoIntake([&]() { if(TaskHandler::autoIntake) Color::autoIntake(Color::colorConvertor(Color::state)); pros::delay(Misc::DELAY); });
-    Auton::Test::main();//Change "Color::state" value in declaration within the "main" function
-    pros::delay(10000000);
-    (Auton::state < autonRoutines.size()) ? autonRoutines[Auton::state].second() : Auton::Test::main();
+    // pros::Task sorterC([&](){ if(TaskHandler::colorSort) Color::colorSort(Color::state); pros::delay(Misc::DELAY); });
+    // pros::Task autoIntake([&]() { if(TaskHandler::autoIntake) Color::autoIntake(Color::colorConvertor(Color::state)); pros::delay(Misc::DELAY); });
+    // Auton::Test::main();//Change "Color::state" value in declaration within the "main" function
+    // pros::delay(10000000);
+    // (Auton::state < autonRoutines.size()) ? autonRoutines[Auton::state].second() : Auton::Test::main();
 }
 
 // <--------------------------------------------------------------- Driver --------------------------------------------------------------->
 void opcontrol() {
-    pros::Task sorterC([&](){ if(TaskHandler::colorSort) Color::colorSort(Color::state); pros::delay(Misc::DELAY); });
-    pros::Task driverTask(Driver::joystick);
-    pros::Task intakeTask(Driver::intake);
-    pros::Task pistonTask(Driver::piston);
-    pros::Task hangTask(Driver::hang);
+    // TaskHandler::colorSort = true;
+    pros::Task sorterC([&](){ if(true) Color::colorSort(Color::colorVals::RED);});
+    pros::Task intakeTask([&]() {Driver::intake();});
+
+
+    // pros::Task driverTask(Driver::joystick);
+    // pros::Task pistonTask(Driver::piston);
+    // pros::Task hangTask(Driver::hang);
 	leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST);
 	rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_COAST);
     while(1) {
