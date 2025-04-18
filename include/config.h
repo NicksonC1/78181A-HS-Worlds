@@ -12,7 +12,8 @@ extern pros::MotorGroup rightMotors;
 namespace Motor{
     // extern pros::Motor intakeB;
     extern pros::Motor intakeT;
-    extern pros::Motor lb;
+    extern pros::Motor lbL;
+    extern pros::Motor lbR;
 } // namespace Motor
 
 namespace Sensor{
@@ -25,11 +26,8 @@ namespace Sensor{
 
 namespace Piston{
     extern pros::adi::DigitalOut lightsaberL;
-    // extern pros::adi::DigitalOut lightsaberR;
     extern pros::adi::DigitalOut saberclamp;
-    // extern pros::adi::DigitalOut intake;
     extern pros::adi::DigitalOut mogo;
-    extern pros::adi::DigitalOut sorter;
     extern pros::adi::DigitalOut pto;
     extern pros::adi::DigitalOut release;
 } // namespace Piston

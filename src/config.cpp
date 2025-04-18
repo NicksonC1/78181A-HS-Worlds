@@ -14,26 +14,23 @@ pros::MotorGroup rightMotors({18, -19, 20}, pros::MotorGearset::blue);
 namespace Motor{
     // pros::Motor intakeB(16, pros::MotorGearset::blue);
     pros::Motor intakeT(-2, pros::MotorGearset::blue);
-    pros::Motor lb(-6, pros::MotorGearset::green);
+    pros::Motor lbL(-7, pros::MotorGearset::green);
+    pros::Motor lbR(6, pros::MotorGearset::green);
 } // namespace Motor
 
 namespace Sensor{
-    // pros::Rotation lbR(7);
     pros::Distance hang(5);
     pros::Optical o_colorSort(9);
-    pros::Distance d_colorSort(10);
+    pros::Optical d_colorSort(10);
     pros::adi::DigitalIn autonSwitch({8,'Z'});
 } // namspace Sensor
 
 namespace Piston{
     pros::adi::DigitalOut lightsaberL({8,'G'}); // checked
-    // pros::adi::DigitalOut lightsaberR({8,'Z'});
     pros::adi::DigitalOut saberclamp('F'); // checked
-    // pros::adi::DigitalOut intake({8,'Z'});
     pros::adi::DigitalOut mogo({8,'H'}); // checked
-    pros::adi::DigitalOut sorter('H'); // checked
     pros::adi::DigitalOut pto('G'); // checked
-    pros::adi::DigitalOut release({8,'A'}); // change later
+    pros::adi::DigitalOut release('H'); // checked
 } // namespace Piston
 
 // <------------------------------------------------------------- Odom Sensors ------------------------------------------------------------->
