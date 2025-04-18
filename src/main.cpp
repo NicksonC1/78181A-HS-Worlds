@@ -198,9 +198,8 @@ namespace Color {
     colorVals colorConvertor(colorVals input){ (input == colorVals::BLUE) ? input : input = colorVals::RED; return input; }
     void colorSort(colorVals input) { // Input refers to color to BE sorted
         colorVals lastColor = colorVals::NONE;
-        Sensor::o_colorSort.set_integration_time(4);
         while (1) {
-            Sensor::o_colorSort.set_led_pwm(100);
+            double prevSpeed = Motor::intakeT.get_voltage();
             if (isRed(Sensor::o_colorSort.get_hue()) && (Sensor::o_colorSort.get_proximity() > MIN_VAL && Sensor::o_colorSort.get_proximity() < 256)){
                 controller.rumble(".");
                 lastColor = colorVals::RED; 
@@ -208,7 +207,7 @@ namespace Color {
                 TaskHandler::intake = false;
                 Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
                 Motor::intakeT.brake();
-                pros::delay(2000);
+                pros::delay(750);
                 // Motor::intakeT.move(127);
                 Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
                 TaskHandler::intake = true;
@@ -513,6 +512,8 @@ void initialize() {
     chassis.setPose(0, 0, 0);
     chassis.calibrate(); 
     Motor::lb.set_zero_position(0.0);
+    Sensor::o_colorSort.set_led_pwm(100);
+    Sensor::o_colorSort.set_integration_time(4);
     controller.clear();
     // pros::Task screenTask([&]() {
     //     while (1) {
@@ -549,7 +550,6 @@ void opcontrol() {
     // TaskHandler::colorSort = true;
     pros::Task sorterC([&](){ if(true) Color::colorSort(Color::colorVals::RED);});
     pros::Task intakeTask([&]() {Driver::intake();});
-
 
     // pros::Task driverTask(Driver::joystick);
     // pros::Task pistonTask(Driver::piston);
