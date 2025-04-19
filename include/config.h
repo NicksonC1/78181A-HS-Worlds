@@ -20,7 +20,7 @@ namespace Sensor{
     // extern pros::Rotation lbR;
     extern pros::Distance hang;
     extern pros::Optical o_colorSort;
-    extern pros::Distance d_colorSort;
+    // extern pros::Distance d_colorSort;
     extern pros::adi::DigitalIn autonSwitch;
 } // namspace Sensor
 

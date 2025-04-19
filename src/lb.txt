@@ -1,0 +1,114 @@
+namespace Lift {
+    int lift_index = 0;
+    int lift_target_position = 0;
+    bool autonomousMode = false;
+    constexpr int RESET = 0, LOAD = 198, SCORE = 950, HANG = 600;
+    std::vector<int> l_rot_target = {RESET, LOAD, SCORE}; 
+    double lift_kp_up = 1.0, lift_kp_down = 1.5, lift_kd = 0.0, dM = 1.0;
+    static double lastError = 0, lastTime = pros::millis();
+    void setState(int newTarget) {
+        if (lift_target_position == LOAD && newTarget > LOAD) {
+            pros::Task([] {
+                Misc::intakeR = true;
+                Motor::intakeT.move(-25);
+                pros::delay(250);
+                Motor::intakeT.move(0);
+                Misc::intakeR = false;
+                std::cout << "[Driver] Intake reversed briefly on lift from LOAD\n";
+            });
+        }
+
+        lift_target_position = newTarget;
+        autonomousMode = true;
+        std::cout << "[Auto] SetState called: Lift target = " << lift_target_position << std::endl;
+    }
+
+    void autolift() {
+        static bool locked = false;
+        static int prev_target_position = lift_target_position;
+
+        double motorPosition = Motor::lbL.get_position();
+        double error = lift_target_position - motorPosition;
+        double deltaTime = std::max((pros::millis() - lastTime) / 1000.0, 0.01);
+        double derivative = (error - lastError) / deltaTime;
+        double velocity = (error > 0) ? (lift_kp_up * error) : ((lift_kp_down * error) * dM);
+
+        if (lift_target_position == LOAD && motorPosition < LOAD) {
+            velocity = std::clamp(velocity, -30.0, 30.0);
+        }
+
+        velocity += lift_kd * derivative;
+
+        if (std::fabs(error) < 1.5) {
+            if (!locked) {
+                Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+                Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+                locked = true;
+                if (autonomousMode) autonomousMode = false;
+            }
+        } else {
+            locked = false;
+            Motor::lbL.move(velocity);
+            Motor::lbR.move(velocity);
+        }
+
+        lastError = error;
+        lastTime = pros::millis();
+    }
+
+    void lift() {
+
+        if (autonomousMode) { autolift(); return; }
+        if (lift_target_position == SCORE) {
+            if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) { Motor::lbL.move(127); Motor::lbR.move(127); }
+            else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+                Motor::lbL.move(-127);
+                Motor::lbR.move(-127);
+            if (Motor::lbL.get_position() < 50) {
+                    lift_index = 1;
+                    lift_target_position = l_rot_target[lift_index];
+                }
+            } 
+            else { Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD); Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD); Motor::lbL.brake(); Motor::lbR.brake(); }
+        } 
+        else autolift();
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2) || 
+            controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+            autonomousMode = false;
+        }
+
+
+        // If driver touches buttons, disable PID and stop tracking target
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
+            Motor::lbL.move(127);
+            Motor::lbR.move(127);
+            autonomousMode = false;
+            lift_target_position = 0;  // Clear the target — this prevents going back
+            return;
+        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+            Motor::lbL.move(-127);
+            Motor::lbR.move(-127);
+            autonomousMode = false;
+            lift_target_position = 0;  // Clear the target — this prevents going back
+
+            // Optional: snap back to LOAD position if low
+            if (Motor::lbL.get_position() < 50) {
+                lift_target_position = LOAD;
+            }
+
+            return;
+        }
+
+        // If PID is still active, run it
+        if (autonomousMode) {
+            autolift();
+        } else {
+            // Hold position if nothing is happening
+            Motor::lbL.set_brake_mode(Misc::brakeState);
+            Motor::lbR.set_brake_mode(Misc::brakeState);
+            Motor::lbL.brake();
+            Motor::lbR.brake();
+        }
+    }
+} // namespace Lift
