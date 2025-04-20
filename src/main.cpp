@@ -17,11 +17,10 @@ std::vector<std::pair<float, float>> points;
 
 namespace TaskHandler {
     bool colorSort = true;
+    bool isShared = !colorSort;
     bool lbD = true;
     bool lbH = false;
     bool autoIntake = false;
-    int sharedSpeed = 127;
-    bool isShared = false;
 } // namespace TaskHandler
 
 // <------------------------------------------------------------ Miscellaneous ------------------------------------------------------------>
@@ -77,430 +76,106 @@ namespace Misc{
 } // namespace Misc
 
 // <-------------------------------------------------------------- Lady Brown ------------------------------------------------------------>
-// namespace Lift {
-// 	int lift_target_position = 0;
-// 	bool autonomousMode = false;
-
-// 	constexpr int RESET = 0, LOAD = 175, SCORE = 950, HANG = 600;
-// 	double kp_up = 1.0, kp_down = 1.5, kd = 0.0, dM = 1.0;
-// 	static double lastError = 0, lastTime = pros::millis();
-
-// 	void setState(int t) {
-// 		if (lift_target_position == LOAD && t > LOAD) pros::Task([] {
-// 			Misc::intakeR = true; Motor::intakeT.move(-25); pros::delay(250);
-// 			Motor::intakeT.move(0); Misc::intakeR = false;
-// 			std::cout << "[Driver] Intake reversed briefly on lift from LOAD\n";
-// 		});
-// 		lift_target_position = t; autonomousMode = true;
-// 		std::cout << "[Auto] SetState: Target = " << t << "\n";
-// 	}
-
-// 	void autolift() {
-// 		static bool locked = false;
-// 		double pos = Motor::lb.get_position(), err = lift_target_position - pos;
-// 		double dt = std::max((pros::millis() - lastTime) / 1000.0, 0.01);
-// 		double vel = (err > 0 ? kp_up : kp_down * dM) * err + kd * (err - lastError) / dt;
-// 		if (lift_target_position == LOAD && pos < LOAD) vel = std::clamp(vel, -127.0, 60.0);
-// 		if (std::fabs(err) < 1.5) {
-// 			if (!locked) { Motor::lb.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD); locked = true; autonomousMode = false; }
-// 		} else locked = false, Motor::lb.move(vel);
-// 		lastError = err; lastTime = pros::millis();
-// 	}
-
-// 	void lift() {
-// 		if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) { Motor::lb.move(127); autonomousMode = false; lift_target_position = 0; return; }
-// 		if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-// 			Motor::lb.move(-127); autonomousMode = false; lift_target_position = 0;
-// 			if (Motor::lb.get_position() < 50) lift_target_position = LOAD;
-// 			return;
-// 		}
-// 		if (autonomousMode) autolift();
-// 		else Motor::lb.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD), Motor::lb.brake();
-// 	}
-// }
-
-// 2 //////////////////-------
-// namespace Lift {
-//     int lift_target_position = 0;
-//     bool autonomousMode = false;
-
-//     constexpr int RESET = 0, LOAD = 178, SCORE = 950, HANG = 600;
-//     std::vector<int> l_rot_target = {RESET, LOAD, SCORE};
-
-//     double lift_kp_up = 1.5, lift_kp_down = 1.1, lift_kd = 0.0, dM = 1.0;
-//     static double lastError = 0, lastTime = pros::millis();
-//     void setState(int newTarget) {
-//         if (lift_target_position == LOAD && newTarget > LOAD) {
-//             pros::Task([] {
-//                 Misc::intakeR = true;
-//                 Motor::intakeT.move(-25);
-//                 pros::delay(350);
-//                 Motor::intakeT.move(0);
-//                 Misc::intakeR = false;
-//                 std::cout << "[Driver] Intake reversed briefly on lift from LOAD\n";
-//             });
-//         }
-
-//         lift_target_position = newTarget;
-//         autonomousMode = true;
-//         std::cout << "[Auto] SetState called: Lift target = " << lift_target_position << std::endl;
-//     }
-
-//     void autolift() {
-//         static bool locked = false;
-
-//         double motorPosition = Motor::lbL.get_position();
-//         double error = lift_target_position - motorPosition;
-//         double deltaTime = std::max((pros::millis() - lastTime) / 1000.0, 0.01);
-//         double derivative = (error - lastError) / deltaTime;
-//         double velocity = (error > 0) ? (lift_kp_up * error) : ((lift_kp_down * error) * dM);
-
-//         if (lift_target_position == LOAD && motorPosition < LOAD) {
-//             velocity = std::clamp(velocity, -30.0, 30.0);
-//         }
-
-//         velocity += lift_kd * derivative;
-
-//         if (std::fabs(error) < 1.5) {
-//             if (!locked) {
-//                 Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-//                 Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-//                 locked = true;
-//                 if (autonomousMode) autonomousMode = false;
-//             }
-//         } else {
-//             locked = false;
-//             Motor::lbL.move(velocity);
-//             Motor::lbR.move(velocity);
-//         }
-
-//         lastError = error;
-//         lastTime = pros::millis();
-//     }
-
-//     void lift() {
-//         // If driver touches buttons, disable PID and stop tracking target
-//         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
-//             Motor::lbL.move(127);
-//             Motor::lbR.move(127);
-//             autonomousMode = false;
-//             lift_target_position = 0;  // Clear the target — this prevents going back
-//             return;
-//         } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-//             Motor::lbL.move(-127);
-//             Motor::lbR.move(-127);
-//             autonomousMode = false;
-//             lift_target_position = 0;  // Clear the target — this prevents going back
-
-//             // Optional: snap back to LOAD position if low
-//             if (Motor::lbL.get_position() < 50) {
-//                 lift_target_position = LOAD;
-//             }
-
-//             return;
-//         }
-
-//         // If PID is still active, run it
-//         if (autonomousMode) {
-//             autolift();
-//         } else {
-//             // Hold position if nothing is happening
-//             Motor::lbL.set_brake_mode(Misc::brakeState);
-//             Motor::lbR.set_brake_mode(Misc::brakeState);
-//             Motor::lbL.brake();
-//             Motor::lbR.brake();
-//         }
-//     }
-// } // namespace Lift
-
-// 11 
-// namespace Lift{
-//     int lift_index = 0;
-//     int lift_target_position = 0;
-//     bool autonomousMode = false;
-//     constexpr int RESET = 0, LOAD = 130, SCORE = 950, HANG = 600; 
-//     std::vector<int> l_rot_target = {RESET, LOAD, SCORE}; 
-//     double lift_kp_up = 1.0, lift_kp_down = 1.5, lift_kd = 0.0, dM = 1.0;
-//     static double lastError = 0, lastTime = pros::millis();
-//     void setState(int newTarget) {
-//          if (lift_target_position == LOAD && newTarget > LOAD) {
-//              pros::Task([] {
-//                  Misc::intakeR = true;
-//                  Motor::intakeT.move(-25);
-//                  pros::delay(250);
-//                  Motor::intakeT.move(0);
-//                  Misc::intakeR = false;
-//                  std::cout << "[Driver] Intake reversed briefly on lift from LOAD\n";
-//              });
-//          }
-//         lift_target_position = newTarget;
-//         autonomousMode = true;
-//         std::cout << "[Auto] SetState called: Lift target = " << lift_target_position << std::endl;
-//     }
-//     void autolift() {
-//          static bool locked = false;
-//          static int prev_target_position = lift_target_position;
- 
-//          if (!autonomousMode) {
-//              if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) {
-//                 if (lift_index < (int)l_rot_target.size() - 1) {
-//                      int new_index = lift_index + 1;
-//                      int new_target = l_rot_target[new_index];
- 
-//                      // Check for transition from LOAD to higher
-//                      if (lift_target_position == LOAD && new_target > LOAD) {
-//                          pros::Task([] {
-//                              Misc::intakeR = true;
-//                              Motor::intakeT.move(-25);
-//                              pros::delay(250);
-//                              Motor::intakeT.move(0);
-//                              Misc::intakeR = false;
-//                              std::cout << "[Driver] Intake reversed briefly on lift from LOAD\n";
-//                          });
-//                      }
- 
-//                      lift_index = new_index;
-//                      lift_target_position = new_target;
-//                      controller.rumble(".");
-//                      std::cout << "[Driver] L2 Pressed: Index = " << lift_index 
-//                              << ", Target = " << lift_target_position << std::endl;
-//                  }
-//              } else if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)) {
-//                  if (lift_index > 0) {
-//                      lift_index--;
-//                      lift_target_position = l_rot_target[lift_index];
-//                      std::cout << "[Driver] R2 Pressed: Index = " << lift_index 
-//                              << ", Target = " << lift_target_position << std::endl;
-//                  }
-//              }
-//          }
- 
-//         double motorPosition = Motor::lbL.get_position();
-//         double error = lift_target_position - motorPosition;
-//         double deltaTime = std::max((pros::millis() - lastTime) / 1000.0, 0.01); 
-//         double derivative = (error - lastError) / deltaTime;
-//         double velocity = (error > 0) ? (lift_kp_up * error) : ((lift_kp_down * error) * dM);
-//         if (lift_target_position == LOAD && Motor::lbL.get_position() < LOAD) velocity = std::clamp(velocity, -127.0, 60.0); 
-//         velocity += lift_kd * derivative;
-//         if (std::fabs(error) < 1.5) {
-//             if (!locked) {
-//                 Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-//                 Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-//                 locked = true;
-//                 if (autonomousMode) autonomousMode = false;
-//             }
-//         } 
-//         else {
-//             locked = false;
-//             Motor::lbL.move(velocity);
-//             Motor::lbR.move(velocity);
-//         }
-//         lastError = error;
-//         lastTime = pros::millis();
-//     }
-//     void lift() {
-//         if (autonomousMode) { autolift(); return; }
-//         if (lift_target_position == SCORE) {
-//             if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) { Motor::lbL.move(127); Motor::lbR.move(127); }
-//             else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-//                 Motor::lbL.move(-127);
-//                 Motor::lbR.move(-127);
-//                 if (Motor::lbL.get_position() < 50) {
-//                     lift_index = 1;
-//                     lift_target_position = l_rot_target[lift_index];
-//                 }
-//             } 
-//             else { 
-//                 Motor::lbL.set_brake_mode(Misc::brakeState); Motor::lbR.set_brake_mode(Misc::brakeState);
-//                 Motor::lbL.brake(); Motor::lbR.brake(); }
-//         } 
-//         else autolift();
-
-//         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2) || 
-//             controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-//             autonomousMode = false;
-//         }
-//      }
-// } // namespace Lift
-
-
-// namespace Lift {
-//     int lift_index = 0;
-//     int lift_target_position = 0;
-//     bool autonomousMode = false;
-//     constexpr int RESET = 0, LOAD = 198, SCORE = 950, HANG = 600;
-//     std::vector<int> l_rot_target = {RESET, LOAD, SCORE}; 
-//     double lift_kp_up = 1.0, lift_kp_down = 1.5, lift_kd = 0.0, dM = 1.0;
-//     static double lastError = 0, lastTime = pros::millis();
-//     void setState(int newTarget) {
-//         if (lift_target_position == LOAD && newTarget > LOAD) {
-//             pros::Task([] {
-//                 Misc::intakeR = true;
-//                 Motor::intakeT.move(-25);
-//                 pros::delay(250);
-//                 Motor::intakeT.move(0);
-//                 Misc::intakeR = false;
-//                 std::cout << "[Driver] Intake reversed briefly on lift from LOAD\n";
-//             });
-//         }
-
-//         lift_target_position = newTarget;
-//         autonomousMode = true;
-//         std::cout << "[Auto] SetState called: Lift target = " << lift_target_position << std::endl;
-//     }
-
-//     void autolift() {
-//         static bool locked = false;
-//         static int prev_target_position = lift_target_position;
-
-//         double motorPosition = Motor::lbL.get_position();
-//         double error = lift_target_position - motorPosition;
-//         double deltaTime = std::max((pros::millis() - lastTime) / 1000.0, 0.01);
-//         double derivative = (error - lastError) / deltaTime;
-//         double velocity = (error > 0) ? (lift_kp_up * error) : ((lift_kp_down * error) * dM);
-
-//         if (lift_target_position == LOAD && motorPosition < LOAD) {
-//             velocity = std::clamp(velocity, -30.0, 30.0);
-//         }
-
-//         velocity += lift_kd * derivative;
-
-//         if (std::fabs(error) < 1.5) {
-//             if (!locked) {
-//                 Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-//                 Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-//                 locked = true;
-//                 if (autonomousMode) autonomousMode = false;
-//             }
-//         } else {
-//             locked = false;
-//             Motor::lbL.move(velocity);
-//             Motor::lbR.move(velocity);
-//         }
-
-//         lastError = error;
-//         lastTime = pros::millis();
-//     }
-
-//     void lift() {
-//         if (autonomousMode) { autolift(); return; }
-//         if (lift_target_position == SCORE) {
-//             if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) { Motor::lbL.move(127); Motor::lbR.move(127); autonomousMode = false; lift_target_position = 0;}
-//             else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-//                 Motor::lbL.move(-127);
-//                 Motor::lbR.move(-127);
-//                 autonomousMode = false;
-//                 lift_target_position = 0;
-//                 if (Motor::lbL.get_position() < 50) {
-//                     lift_target_position = LOAD;
-//                 }
-
-//             }
-//             // If PID is still active, run it
-//             if (autonomousMode) {
-//                 autolift();
-//             } else {
-//                 // Hold position if nothing is happening
-//                 Motor::lbL.set_brake_mode(Misc::brakeState);
-//                 Motor::lbR.set_brake_mode(Misc::brakeState);
-//                 Motor::lbL.brake();
-//                 Motor::lbR.brake();
-//             }
-//             // else { Motor::lbL.set_brake_mode(Misc::brakeState); Motor::lbR.set_brake_mode(Misc::brakeState); Motor::lbL.brake(); Motor::lbR.brake(); }
-//         }
-//         // else autolift();
-
-//         // if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2) || 
-//         //     controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-//         //     autonomousMode = false;
-//         // }
-
-
-//         // // If driver touches buttons, disable PID and stop tracking target
-//         // if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
-//         //     Motor::lbL.move(127);
-//         //     Motor::lbR.move(127);
-//         //     autonomousMode = false;
-//         //     lift_target_position = 0;  // Clear the target — this prevents going back
-//         //     return;
-//         // } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-//         //     Motor::lbL.move(-127);
-//         //     Motor::lbR.move(-127);
-//         //     autonomousMode = false;
-//         //     lift_target_position = 0;  // Clear the target — this prevents going back
-
-//         //     // Optional: snap back to LOAD position if low
-//         //     if (Motor::lbL.get_position() < 50) {
-//         //         lift_target_position = LOAD;
-//         //     }
-
-//         //     return;
-//         // }
-
-//         // // If PID is still active, run it
-//         // if (autonomousMode) {
-//         //     autolift();
-//         // } else {
-//         //     // Hold position if nothing is happening
-//         //     Motor::lbL.set_brake_mode(Misc::brakeState);
-//         //     Motor::lbR.set_brake_mode(Misc::brakeState);
-//         //     Motor::lbL.brake();
-//         //     Motor::lbR.brake();
-//         // }
-//     }
-// } // namespace Lift
-
-
-
 namespace Lift {
-    int lift_target_position = 0;
-    int lift_index = 0;
+    int lift_index = 0; // Index for cycling through presets
+    int lift_target_position = 0; // Absolute target position
     bool autonomousMode = false;
 
-    constexpr int RESET = 0, LOAD = 130, SCORE = 950, HANG = 600;
-    std::vector<int> l_rot_target = {RESET, LOAD, SCORE};
+    constexpr int RESET = 0, LOAD = 160, SCORE = 1050, HANG = 600; // (216)
+    std::vector<int> l_rot_target = {RESET, LOAD, SCORE};  // Preset lift positions
 
-    double lift_kp_up = 1.0, lift_kp_down = 1.5, lift_kd = 0.0, dM = 1.0;
+    double lift_kp_up = 1.0, lift_kp_down = 1.0, lift_kd = 0.0, dM = 1.0;
     static double lastError = 0, lastTime = pros::millis();
 
     void setState(int newTarget) {
-        if (lift_target_position == LOAD && newTarget > LOAD) {
+        lift_target_position = newTarget;
+
+        // // Check if the new target is in the list
+        // auto it = std::find(l_rot_target.begin(), l_rot_target.end(), newTarget);
+        // if (it != l_rot_target.end()) {
+        //     lift_index = std::distance(l_rot_target.begin(), it);
+        // } else {
+        //     lift_index = -1; // Allow custom targets
+        // }
+
+        // Always trigger intake reversal if going up from LOAD, regardless of index
+        if (lift_target_position > LOAD && Motor::lbL.get_position() <= LOAD) {
             pros::Task([] {
                 Misc::intakeR = true;
                 Motor::intakeT.move(-25);
-                pros::delay(350);
+                pros::delay(250);
                 Motor::intakeT.move(0);
                 Misc::intakeR = false;
-                std::cout << "[Driver] Intake reversed briefly on lift from LOAD\n";
+                std::cout << "[Auto] Intake reversed briefly on lift from LOAD\n";
             });
         }
-        lift_target_position = newTarget;
+
         autonomousMode = true;
-        std::cout << "[Auto] setState called: Lift target = " << lift_target_position << std::endl;
+        std::cout << "[Auto] SetState called: Lift target = " << lift_target_position << std::endl;
     }
 
     void autolift() {
         static bool locked = false;
+        static int prev_target_position = lift_target_position;
+
+        // Allow manual increment/decrement through controller
+        if (!autonomousMode) {
+            if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) {
+                if (lift_index < (int)l_rot_target.size() - 1) {
+                    int new_index = lift_index + 1;
+                    int new_target = l_rot_target[new_index];
+
+                    // Check for transition from LOAD to higher
+                    if (lift_target_position == LOAD && new_target > LOAD) {
+                        pros::Task([] {
+                            Misc::intakeR = true;
+                            Motor::intakeT.move(-25);
+                            pros::delay(250);
+                            Motor::intakeT.move(0);
+                            Misc::intakeR = false;
+                            std::cout << "[Driver] Intake reversed briefly on lift from LOAD\n";
+                        });
+                    }
+
+                    lift_index = new_index;
+                    lift_target_position = new_target;
+                    controller.rumble(".");
+                    std::cout << "[Driver] L2 Pressed: Index = " << lift_index 
+                            << ", Target = " << lift_target_position << std::endl;
+                }
+            } else if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)) {
+                if (lift_index > 0) {
+                    lift_index--;
+                    lift_target_position = l_rot_target[lift_index];
+                    std::cout << "[Driver] R2 Pressed: Index = " << lift_index 
+                            << ", Target = " << lift_target_position << std::endl;
+                }
+            }
+        }
 
         double motorPosition = Motor::lbL.get_position();
         double error = lift_target_position - motorPosition;
-        double deltaTime = std::max((pros::millis() - lastTime) / 1000.0, 0.01);
+        double deltaTime = std::max((pros::millis() - lastTime) / 1000.0, 0.01); // seconds
         double derivative = (error - lastError) / deltaTime;
+        // Basic PID velocity
         double velocity = (error > 0) ? (lift_kp_up * error) : ((lift_kp_down * error) * dM);
 
-        if (lift_target_position == LOAD && motorPosition < LOAD)
-            velocity = std::clamp(velocity, -30.0, 30.0);
+        // If moving from RESET to LOAD, cap upward speed to avoid overshoot
+        if (lift_target_position == LOAD && Motor::lbL.get_position() < LOAD) {
+            velocity = std::clamp(velocity, -50.0, 50.0);  // upward cap = 60
+        }
 
         velocity += lift_kd * derivative;
 
-        if (std::fabs(error) < 1.5) {
-            if (!locked) {
-                Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-                Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-                locked = true;
-                if (autonomousMode) autonomousMode = false;
-            }
-        } else {
+        if (lift_target_position == RESET && std::fabs(error) < 5) {
+            Motor::lbL.move(0);
+            Motor::lbR.move(0);
+            locked = true;
+            return;
+        }
+
+
+        else {
             locked = false;
             Motor::lbL.move(velocity);
             Motor::lbR.move(velocity);
@@ -511,72 +186,32 @@ namespace Lift {
     }
 
     void lift() {
-        // Macro button logic for toggling lift states
-        if (!autonomousMode) {
-            if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) {
-                if (lift_index < (int)l_rot_target.size() - 1) {
-                    int new_index = lift_index + 1;
-                    int new_target = l_rot_target[new_index];
+        if (lift_target_position == SCORE) {  // Manual override only at SCORE height
+            if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
+                Motor::lbL.move(127);
+                Motor::lbR.move(127);
+                std::cout << "[Driver] Manual Move UP" << std::endl;
+            } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+                Motor::lbL.move(-127);
+                Motor::lbR.move(-127);
+                std::cout << "[Driver] Manual Move DOWN" << std::endl;
 
-                    if (lift_target_position == LOAD && new_target > LOAD) {
-                        pros::Task([] {
-                            Misc::intakeR = true;
-                            Motor::intakeT.move(-25);
-                            pros::delay(250);
-                            Motor::intakeT.move(0);
-                            Misc::intakeR = false;
-                            std::cout << "[Driver] Intake reversed briefly on macro lift from LOAD\n";
-                        });
-                    }
-
-                    lift_index = new_index;
-                    lift_target_position = new_target;
-                    controller.rumble(".");
-                    std::cout << "[Driver] L2 Pressed: Index = " << lift_index 
-                              << ", Target = " << lift_target_position << std::endl;
-                }
-            } else if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)) {
-                if (lift_index > 0) {
-                    lift_index--;
+                if (Motor::lbL.get_position() < 50) {
+                    lift_index = 1;
                     lift_target_position = l_rot_target[lift_index];
-                    std::cout << "[Driver] R2 Pressed: Index = " << lift_index 
-                              << ", Target = " << lift_target_position << std::endl;
                 }
+            } else {
+                Motor::lbL.set_brake_mode(Misc::brakeState);
+                Motor::lbR.set_brake_mode(Misc::brakeState);
+                Motor::lbL.brake();
+                Motor::lbR.brake();
             }
-        }
 
-        // Manual override disables autonomous control
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
-            Motor::lbL.move(127);
-            Motor::lbR.move(127);
-            autonomousMode = false;
-            lift_target_position = 0;
-            return;
-        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-            Motor::lbL.move(-127);
-            Motor::lbR.move(-127);
-            autonomousMode = false;
-            lift_target_position = 0;
-
-            // Optional: snap back to LOAD
-            if (Motor::lbL.get_position() < 50) {
-                lift_index = 1;
-                lift_target_position = l_rot_target[lift_index];
-            }
-            return;
-        }
-
-        // Use PID control when not manually controlling
-        if (autonomousMode || lift_target_position != 0) {
-            autolift();
         } else {
-            Motor::lbL.set_brake_mode(Misc::brakeState);
-            Motor::lbR.set_brake_mode(Misc::brakeState);
-            Motor::lbL.brake();
-            Motor::lbR.brake();
+            autolift();
         }
 
-        // Disable autonomous mode on manual input
+        // Any manual control disables auto mode
         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2) || 
             controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
             autonomousMode = false;
@@ -590,8 +225,8 @@ namespace Color {
     enum class colorVals { NONE, BLUE, RED };
     colorVals state = colorVals::NONE;
     bool isDone = false;
-    constexpr double rLow = 5.0, rHigh = 20.0, bLow = 180.0, bHigh = 230.0, minProx= 195;//Values for colorSort
-    constexpr double rLow1 = 9.0, rHigh1 = 36.0, bLow1 = 175.0, bHigh1 = 230.0, minProx1 = 150;//Values for ring store on intake
+    constexpr double rLow = 5.0, rHigh = 20.0, bLow = 180.0, bHigh = 230.0, minProx= 195; // Values for colorSort
+    constexpr double rLow1 = 9.0, rHigh1 = 36.0, bLow1 = 175.0, bHigh1 = 230.0, minProx1 = 150; // Values for ring store on intake
     inline bool isRed(double h, double low, double max) { return h > low && h < max; }
     inline bool isBlue(double h, double low, double max) { return h > low && h < max; }
     inline bool withinProx(int input, double max) { return (input > max); }
@@ -599,48 +234,41 @@ namespace Color {
     void colorSort(colorVals input) {
         colorVals lastColor = colorVals::NONE;
         while (1) {
-            Sensor::o_colorSort.set_led_pwm(100);
             if(isRed(Sensor::o_colorSort.get_hue(),rLow,rHigh) && withinProx(Sensor::o_colorSort.get_proximity(),minProx)) { lastColor = colorVals::RED; } 
             else if(isBlue(Sensor::o_colorSort.get_hue(),bLow,bHigh) && withinProx(Sensor::o_colorSort.get_proximity(),minProx)) { lastColor = colorVals::BLUE; }
             if(input == lastColor){
-                pros::delay(42);
+                pros::delay(65);
                 Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
                 Motor::intakeT.brake();
                 // Motor::intakeT.move(-5);
                 pros::delay(150);
                 Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-                Motor::intakeT.move(TaskHandler::sharedSpeed);
+                Motor::intakeT.move(127);
+                // Motor::intakeT.move(TaskHandler::sharedSpeed);
                 lastColor = colorVals::NONE;
             } 
             pros::delay(Misc::DELAY);
         }
     }
 
-    void toPos(Color::colorVals input){ //color to be hovered
+    void toPos(Color::colorVals input){ // Color to be hovered
         colorVals lastColor = colorVals::NONE;
             Sensor::o_colorSort.set_led_pwm(100);
             if (isRed(Sensor::o_colorSort.get_hue(),rLow1,rHigh1)) lastColor = colorVals::RED;
             else if (isBlue(Sensor::o_colorSort.get_hue(),bLow1,bHigh1)) lastColor = colorVals::BLUE;
             if(input == lastColor){
                 if(withinProx(Sensor::o_colorSort.get_proximity(),minProx1)) {
-                    TaskHandler::sharedSpeed = 0;
+                    // TaskHandler::sharedSpeed = 0;
                     Motor::intakeT.move(-5);
                     pros::delay(150);
                     Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
                     Motor::intakeT.brake();
                 }
-                // do{
-                //     Motor::intakeT.move(127);
-                // } while (!(withinProx(Sensor::o_colorSort.get_proximity(),minProx1)));
-                // Motor::intakeT.move(-5);
-                // pros::delay(150);
-                // Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-                    // Motor::intakeT.brake();
             }
-            TaskHandler::sharedSpeed = 127;
+            // TaskHandler::sharedSpeed = 127;
             pros::delay(Misc::DELAY);
     }
-} // namespace Color\
+} // namespace Color
 
 // <------------------------------------------------------------- Tier Three ------------------------------------------------------------->
 namespace Hang{
@@ -691,8 +319,8 @@ namespace Auton{
     namespace Test{
         void main() { 
             // pros::Task colorSort(Color::colorSort())
-            Color::state = Color::colorVals::RED;
-            Motor::intakeT.move(127);
+            Color::state = Color::colorVals::BLUE;
+            // Motor::intakeT.move(127);
             // Misc::cdrift(30,30,900);
 
             // Lift::setState(Lift::LOAD);
@@ -715,9 +343,10 @@ namespace Auton{
 
             // Lift::setState(Lift::LOAD);
             // pros::delay(1000);
-            // Lift::setState(450);
-            // pros::delay(1000);
-            // Lift::setState(Lift::RESET);
+            Lift::setState(1050);
+            pros::delay(1000);
+            Lift::setState(Lift::RESET);
+            pros::delay(1000);
 
             // chassis.setPose(0, 0, 0);
             // chassis.moveToPoint(0, 48, 10000, {.maxSpeed = 100});
@@ -906,17 +535,15 @@ namespace Screen {
         // controller.set_text(0, 0, "Run Time: " + std::to_string(pros::millis() / 1000) + "s");
         controller.set_text(1, 0, "Test Text 1");
         controller.set_text(2, 0, "Test Text 2");
-        controller.set_text(3, 0, "Drive Left Temp: " + std::to_string(leftMotors.get_temperature()) + "C");
-        controller.set_text(4, 0, "Drive Right Temp: " + std::to_string(rightMotors.get_temperature()) + "C");
-        controller.set_text(5, 0, "Lift Motor Temp: " + std::to_string((Motor::lbL.get_temperature()+Motor::lbR.get_temperature())/2) + "C");
-        controller.set_text(6, 0, "Intake Motor Temp: " + std::to_string(Motor::intakeT.get_temperature()) + "C");
-        controller.set_text(7, 0, "Inertial Yaw: " + std::to_string(s_imu.get_rotation()));
-        controller.set_text(8, 0, "Battery: " + std::to_string(pros::battery::get_capacity()) + "%");
+        // controller.set_text(3, 0, "Drive Left Temp: " + std::to_string(leftMotors.get_temperature()) + "C");
+        // controller.set_text(4, 0, "Drive Right Temp: " + std::to_string(rightMotors.get_temperature()) + "C");
+        // controller.set_text(5, 0, "Lift Motor Temp: " + std::to_string((Motor::lbL.get_temperature()+Motor::lbR.get_temperature())/2) + "C");
+        // controller.set_text(6, 0, "Intake Motor Temp: " + std::to_string(Motor::intakeT.get_temperature()) + "C");
+        // controller.set_text(7, 0, "Inertial Yaw: " + std::to_string(s_imu.get_rotation()));
+        // controller.set_text(8, 0, "Battery: " + std::to_string(pros::battery::get_capacity()) + "%");
         pros::delay(500);
     }
 }
-
-pros::Task screenTask([]{ while (true) { Screen::update(); }});
 
 using AutonFunc = void(*)();
 std::vector<std::pair<std::string, AutonFunc>> autonRoutines = {
@@ -973,7 +600,7 @@ void initialize() {
     });
 
     pros::Task liftC([]{ while (1) { if(TaskHandler::lbD) Lift::lift(); pros::delay(Misc::DELAY); }});
-    // pros::Task screenC([]{ while (1) { Screen::update(); pros::delay(100); }});
+    pros::Task screenC([]{ while (1) { Screen::update(); pros::delay(100); }});
     Motor::intakeT.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
 }
 void disabled() {}
@@ -984,15 +611,7 @@ ASSET(example_txt); // PP
 void autonomous() {
     pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state); pros::delay(Misc::DELAY); }});
     pros::Task toPosC([&](){ while(1) { if(TaskHandler::autoIntake) Color::toPos(Color::colorConvertor(Color::state)); pros::delay(Misc::DELAY); }});
-    Piston::mogo.set_value(true);
-    Color::state = Color::colorVals::RED;
-    Motor::intakeT.move(127);
-    TaskHandler::autoIntake = true;
-    controller.rumble(".");
-
-    // pros::Task autoIntake([&]() { if(TaskHandler::autoIntake) Color::autoIntake(Color::colorConvertor(Color::state)); pros::delay(Misc::DELAY); });
-    // pros::Task sorterC(Color::colorSort(Color::state));
-    // Auton::Test::main();//Change "Color::state" value in declaration within the "main" function
+    Auton::Test::main(); 
     pros::delay(10000000);
     (Auton::state < autonRoutines.size()) ? autonRoutines[Auton::state].second() : Auton::Test::main();
 }
@@ -1011,7 +630,7 @@ void opcontrol() {
     Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
     Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
     while(1) {
-        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_LEFT)) { Lift::setState(1160); }
+        // if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_LEFT)) { Lift::setState(1160); }
         // if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_X)) { Driver::wall(); }
         pros::delay(Misc::DELAY);
     }
