@@ -611,7 +611,10 @@ ASSET(example_txt); // PP
 void autonomous() {
     pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state); pros::delay(Misc::DELAY); }});
     pros::Task toPosC([&](){ while(1) { if(TaskHandler::autoIntake) Color::toPos(Color::colorConvertor(Color::state)); pros::delay(Misc::DELAY); }});
-    Auton::Test::main(); 
+    chassis.setPose(0,0,0);
+    chassis.moveToPose(0, 23.8*2, 0, 4000);
+    controller.set_text(1, 0, "Test Text 1");    
+    //Auton::Test::main(); 
     pros::delay(10000000);
     (Auton::state < autonRoutines.size()) ? autonRoutines[Auton::state].second() : Auton::Test::main();
 }
