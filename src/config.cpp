@@ -13,7 +13,7 @@ pros::MotorGroup rightMotors({18, -19, 20}, pros::MotorGearset::blue);
 
 namespace Motor{
   // pros::Motor intakeB(16, pros::MotorGearset::blue);
-  pros::Motor intakeT(-2, pros::MotorGearset::blue);
+  pros::Motor intake(-2, pros::MotorGearset::blue);
   pros::Motor lbL(-7, pros::MotorGearset::green);
   pros::Motor lbR(6, pros::MotorGearset::green);
 } // namespace Motor
@@ -67,22 +67,33 @@ genesis::Drivetrain drivetrain(&leftMotors, // left motor group
 genesis::ControllerSettings linearController(10.5-1, //10.5 22 proportional gain (kP)
                                              0, // integral gain (kI)
                                              2.5-1, //1.5 3.5 derivative gain (kD)
-                                             0, // anti windup
-                                             0, // small error range, in inches
-                                             0, // small error range timeout, in milliseconds
-                                             0, // large error range, in inches
-                                             0, // large error range timeout, in milliseconds
+                                             3, // anti windup
+                                             1, // small error range, in inches
+                                             100, // small error range timeout, in milliseconds
+                                             3, // large error range, in inches
+                                             500, // large error range timeout, in milliseconds
                                              0 // maximum acceleration (slew)
 );
+
+// genesis::ControllerSettings angularController(2.85, // proportional gain (kP)
+//                                               0, // integral gain (kI)
+//                                               14, // derivative gain (kD) 
+//                                               3, // anti windup
+//                                               1, // small error range, in inches
+//                                               100, // small error range timeout, in milliseconds
+//                                               3, // large error range, in inches
+//                                               500, // large error range timeout, in milliseconds
+//                                               0 // maximum acceleration (slew)
+// );
 
 genesis::ControllerSettings angularController(2.85, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               14, // derivative gain (kD) 
-                                              3, // anti windup
-                                              1, // small error range, in inches
-                                              100, // small error range timeout, in milliseconds
-                                              3, // large error range, in inches
-                                              500, // large error range timeout, in milliseconds
+                                              0, // anti windup
+                                              0, // small error range, in inches
+                                              0, // small error range timeout, in milliseconds
+                                              0, // large error range, in inches
+                                              0, // large error range timeout, in milliseconds
                                               0 // maximum acceleration (slew)
 );
 

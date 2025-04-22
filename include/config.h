@@ -11,7 +11,7 @@ extern pros::MotorGroup rightMotors;
 
 namespace Motor{
     // extern pros::Motor intakeB;
-    extern pros::Motor intakeT;
+    extern pros::Motor intake;
     extern pros::Motor lbL;
     extern pros::Motor lbR;
 } // namespace Motor
