@@ -347,7 +347,7 @@ namespace Color {
 
 // <------------------------------------------------------------- Tier Three ------------------------------------------------------------->
 namespace Hang{
-    constexpr int UNWRAP_TIME = 750, TARGET = 3000, DIST_SENSED = 15;
+    constexpr int UNWRAP_TIME = 750, TARGET = 4200, DIST_SENSED = 15;
     double currPos = 0, kP = 0.35;
     int timer = 0;
 
@@ -358,8 +358,8 @@ namespace Hang{
             pros::delay(5);
         }
         while(!(Sensor::hang.get_distance()<15));
-        leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_BRAKE);
-        rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_BRAKE);
+        leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
+        rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
         leftMotors.brake();
         rightMotors.brake();
     }
@@ -370,7 +370,7 @@ namespace Hang{
         TaskHandler::lbD = true;
         Lift::setState(900);
         do{
-            if(timer > 5000) break;
+            if(timer > 3000) break;
             currPos = leftMotors.get_position();
             double velocity = (TARGET - currPos)*kP;
             leftMotors.move(velocity);
@@ -378,8 +378,19 @@ namespace Hang{
             timer+=Misc::DELAY;
             pros::delay(Misc::DELAY);
         }
-        while(!(currPos > TARGET));
-        TaskHandler::lbD = false;
+        while(currPos < TARGET);
+        Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+        Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+        Lift::setState(400);
+        // do{
+        //     Lift::setState(400);
+        //     pros::delay(Misc::DELAY);
+        // }
+        // while(Motor::lbL.get_position() < 395);
+
+        // TaskHandler::lbD = false;
+        // Motor::lbL.set_zero_position(900.0);
+        // Motor::lbR.set_zero_position(900.0);
         Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
         Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     }
@@ -596,9 +607,7 @@ namespace Driver{
                 Misc::togglePiston(Piston::pto, b_pto); 
                 Misc::brakeState = (Misc::brakeState == pros::E_MOTOR_BRAKE_HOLD) ? pros::E_MOTOR_BRAKE_COAST : pros::E_MOTOR_BRAKE_HOLD;
             }
-            if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) { Hang::release(); }
-            // else if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN) && initT == true && isUp == false) { Hang::pull(); isUp =!isUp; } 
-            // else if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN) && initT == true && isUp == true) { Hang::release(); isUp =!isUp; } 
+            if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_UP)) { Hang::release(); }
             pros::delay(Misc::DELAY);
         }
     }
@@ -610,7 +619,8 @@ namespace Screen {
         pros::delay(500);
         // controller.set_text(0, 0, "Sensed?: " + std::to_string(info) + "Speed" + std::to_string(Color::lastSpeed));
         // controller.set_text(0, 0, "1: " + std::to_string(Sensor::d_colorSort.get_distance()));
-        controller.set_text(0, 0, "Pos: " + std::to_string(Motor::lbL.get_position()));
+        // controller.set_text(0, 0, "Pos: " + std::to_string(Motor::lbL.get_position()));
+        controller.set_text(0, 0, "Dist: " + std::to_string(leftMotors.get_position()));
         // controller.set_text(0, 0, "Run Time: " + std::to_string(pros::millis() / 1000) + "s");
         controller.set_text(1, 0, "Test Text 1");
         controller.set_text(2, 0, "Test Text 2");
@@ -691,9 +701,12 @@ void autonomous() {
     Piston::mogo.set_value(true);
     pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state); pros::delay(Misc::DELAY); }});
     pros::Task toPosC([&](){ while(1) { if(TaskHandler::autoIntake) Color::toPos(Color::colorConvertor(Color::state)); pros::delay(Misc::DELAY); }});
-    Color::state = Color::colorVals::RED;
-    Motor::intake.move(127);
-    TaskHandler::autoIntake = true;
+    Lift::setState(900);
+    pros::delay(1000);
+    Lift::setState(400);
+    // Color::state = Color::colorVals::RED;
+    // Motor::intake.move(127);
+    // TaskHandler::autoIntake = true;
     // chassis.setPose(0,0,0);
     // // chassis.moveToPose(0, 23.8*2, 0, 4000);
     // chassis.turnToHeading(90,10000);
