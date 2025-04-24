@@ -698,17 +698,20 @@ ASSET(example_txt); // PP
 
 // <------------------------------------------------------------- Autonomous ------------------------------------------------------------->
 void autonomous() {
-    Piston::mogo.set_value(true);
-    pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state); pros::delay(Misc::DELAY); }});
-    pros::Task toPosC([&](){ while(1) { if(TaskHandler::autoIntake) Color::toPos(Color::colorConvertor(Color::state)); pros::delay(Misc::DELAY); }});
-    Lift::setState(900);
-    pros::delay(1000);
-    Lift::setState(400);
+    // Piston::mogo.set_value(true);
+    // pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state); pros::delay(Misc::DELAY); }});
+    // pros::Task toPosC([&](){ while(1) { if(TaskHandler::autoIntake) Color::toPos(Color::colorConvertor(Color::state)); pros::delay(Misc::DELAY); }});
+    // Lift::setState(900);
+    // pros::delay(1000);
+    // Lift::setState(400);
+
     // Color::state = Color::colorVals::RED;
     // Motor::intake.move(127);
     // TaskHandler::autoIntake = true;
-    // chassis.setPose(0,0,0);
-    // // chassis.moveToPose(0, 23.8*2, 0, 4000);
+    pros::lcd::print(5, "hellooo");
+    chassis.setPose(0,0,0);
+    chassis.moveToPoint(0, 23.8, 4000, {.maxSpeed = 20});
+    chassis.brake();
     // chassis.turnToHeading(90,10000);
     // controller.set_text(1, 0, "Test Text 1"); 
     // //Auton::Test::main(); 
