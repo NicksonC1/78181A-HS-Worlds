@@ -709,9 +709,14 @@ void autonomous() {
     // Motor::intake.move(127);
     // TaskHandler::autoIntake = true;
     pros::lcd::print(5, "hellooo");
-    chassis.setPose(0,0,0);
-    chassis.moveToPoint(0, 23.8, 4000, {.maxSpeed = 20});
-    chassis.brake();
+
+    // chassis.setPose(0,0,0);
+    // chassis.setBrakeMode(pros::E_MOTOR_BRAKE_HOLD);
+    // chassis.moveToPoint(0, 23.8, 100000, {.maxSpeed = 127});
+    // pros::delay(4500);
+    // chassis.moveToPoint(0, 0, 100000, {.forwards = false, .maxSpeed = 127});
+
+    
     // chassis.turnToHeading(90,10000);
     // controller.set_text(1, 0, "Test Text 1"); 
     // //Auton::Test::main(); 
