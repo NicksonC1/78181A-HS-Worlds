@@ -15,6 +15,10 @@
 std::vector<std::pair<float, float>> points;
 // Auton::state = 0;
 
+namespace offset {
+    double yAxis = -1.07;
+}
+
 namespace TaskHandler {
     bool autonSelect = true;
     bool colorSort = true;
@@ -694,7 +698,6 @@ ASSET(example_txt); // PP
 
 // <------------------------------------------------------------- Autonomous ------------------------------------------------------------->
 void autonomous() {
-    
     // Piston::mogo.set_value(true);
     // pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state); pros::delay(Misc::DELAY); }});
     // pros::Task toPosC([&](){ while(1) { if(TaskHandler::autoIntake) Color::toPos(Color::colorConvertor(Color::state)); pros::delay(Misc::DELAY); }});
