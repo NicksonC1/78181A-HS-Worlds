@@ -14,8 +14,8 @@ pros::MotorGroup rightMotors({18, -19, 20}, pros::MotorGearset::blue);
 namespace Motor{
   // pros::Motor intakeB(16, pros::MotorGearset::blue);
   pros::Motor intake(-2, pros::MotorGearset::blue);
-  pros::Motor lbL(-7, pros::MotorGearset::green);
-  pros::Motor lbR(6, pros::MotorGearset::green);
+  pros::Motor lbL(-8, pros::MotorGearset::green);
+  pros::Motor lbR(7, pros::MotorGearset::green);
 } // namespace Motor
 
 namespace Sensor{
@@ -26,9 +26,9 @@ namespace Sensor{
 } // namspace Sensor
 
 namespace Piston{
-  pros::adi::DigitalOut lightsaberL({8,'G'}); // checked
+  pros::adi::DigitalOut lightsaberL({9,'G'}); // checked
   pros::adi::DigitalOut saberclamp('F'); // checked
-  pros::adi::DigitalOut mogo({8,'H'}); // checked
+  pros::adi::DigitalOut mogo({9,'H'}); // checked
   pros::adi::DigitalOut pto('G'); // checked
   pros::adi::DigitalOut release('H'); // checked
 } // namespace Piston
