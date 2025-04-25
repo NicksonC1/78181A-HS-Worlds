@@ -82,7 +82,7 @@ genesis::ControllerSettings linearController(3.7+1.2, //10.5 22 proportional gai
                                              100, // small error range timeout, in milliseconds
                                              3, // large error range, in inches
                                              500, // large error range timeout, in milliseconds
-                                             0 // maximum acceleration (slew)
+                                             40// maximum acceleration (slew)
 );
 
 // genesis::ControllerSettings angularController(2.85, // proportional gain (kP)
