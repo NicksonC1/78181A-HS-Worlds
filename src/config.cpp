@@ -19,7 +19,7 @@ namespace Motor{
 } // namespace Motor
 
 namespace Sensor{
-  pros::Distance hang(5);
+  pros::Distance lbD(6);
   pros::Optical o_colorSort(10);
   // pros::Optical d_colorSort(10);
   pros::adi::DigitalIn autonSwitch('A');
@@ -50,14 +50,19 @@ class CustomIMU : public pros::IMU {
 
 CustomIMU s_imu(21, 1.01265822785);
 // pros::Imu imu(21);
-pros::Rotation horizontalEnc(-17);
-pros::Rotation verticalEnc(14);
+pros::Rotation horizontalEnc(17);
+pros::Rotation verticalEnc(15);
+// port 14 broken
 
-// genesis::TrackingWheel vertical_tracking_wheel(&verticalEnc, 2.0 , -0.72); // Single
-// genesis::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , 3.18); // Double Stacked
+genesis::TrackingWheel vertical_tracking_wheel(&verticalEnc, 2.0 , -0.62); // Single
+genesis::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.75); // Double Stacked
 
-genesis::TrackingWheel vertical_tracking_wheel(&verticalEnc, 2.0 , -0.784); // Single
-genesis::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , 3.2); // Double Stacked
+// genesis::TrackingWheel vertical_tracking_wheel(&verticalEnc, 2.0 , -0.65); // Single
+// genesis::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.3); // Double Stacked
+
+
+// genesis::TrackingWheel vertical_tracking_wheel(&verticalEnc, 2.0 , -0.5); // Single
+// genesis::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, 2.0 , -2.7); // Double Stacked
 
 // <---------------------------------------------------------------- Config ---------------------------------------------------------------->
 genesis::Drivetrain drivetrain(&leftMotors, // left motor group
