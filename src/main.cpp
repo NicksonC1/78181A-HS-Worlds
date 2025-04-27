@@ -20,6 +20,7 @@ namespace offset {
 }
 
 namespace TaskHandler {
+    bool antiJam = false;
     bool autonSelect = true;
     bool colorSort = true;
     bool isShared = !colorSort;
@@ -85,152 +86,6 @@ namespace Misc{
 } // namespace Misc
 
 // <-------------------------------------------------------------- Lady Brown ------------------------------------------------------------>
-// namespace Lift {
-//     enum LiftMode { RESET, LOAD, SCORE };
-//     LiftMode lift_mode = RESET;
-
-//     int lift_target_position = 0;
-//     bool autonomousMode = false;
-//     bool manualOverride = false;
-
-//     constexpr int RESET_POS = 0, LOAD_POS = 165, SCORE_POS = 1050;
-//     double lift_kp_up = 0.8, lift_kp_down = 0.8, lift_kd = 0.0, dM = 1.0;
-
-//     static double lastError = 0;
-//     static double lastTime = pros::millis();
-
-//     void setState(int newTarget) {
-//         lift_target_position = newTarget;
-//         autonomousMode = true;
-//         manualOverride = false;
-//     }
-
-//     void updatePID() {
-//         double pos = Motor::lbR.get_position();
-//         double error = lift_target_position - pos;
-//         double dt = std::max((pros::millis() - lastTime) / 1000.0, 0.01);
-//         double derivative = (error - lastError) / dt;
-
-//         double velocity = (error > 0)
-//             ? (lift_kp_up * error)
-//             : (lift_kp_down * error) * dM;
-
-//         velocity += lift_kd * derivative;
-//         velocity = std::clamp(velocity, -80.0, 80.0);
-
-//         if (lift_target_position == RESET_POS && std::fabs(error) < 5) {
-//             Motor::lbL.move(0);
-//             Motor::lbR.move(0);
-//         } else {
-//             Motor::lbL.move(velocity);
-//             Motor::lbR.move(velocity);
-//         }
-
-//         lastError = error;
-//         lastTime = pros::millis();
-//     }
-
-//     void driverControl() {
-//         static uint32_t r2HoldStart = 0;
-
-//         bool L2_new = controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2);
-//         bool L2 = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2);
-//         bool R2 = controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2);
-
-//         // Handle state transitions via L2
-//         if (L2_new) {
-//             if (lift_mode == RESET) {
-//                 lift_mode = LOAD;
-//                 lift_target_position = LOAD_POS;
-//                 manualOverride = false;
-//                 autonomousMode = false;
-//                 std::cout << "[Driver] L2 press → LOAD\n";
-//             } else if (lift_mode == LOAD) {
-//                 lift_mode = SCORE;
-//                 manualOverride = true;
-//                 autonomousMode = false;
-//                 std::cout << "[Driver] L2 press → SCORE\n";
-//             }
-//         }
-
-//         // Go from LOAD → RESET with R2
-//         if (lift_mode == LOAD && R2) {
-//             lift_mode = RESET;
-//             lift_target_position = RESET_POS;
-//             manualOverride = false;
-//             autonomousMode = false;
-//             std::cout << "[Driver] R2 press in LOAD → RESET\n";
-//         }
-
-//         // SCORE mode: tap R2 → LOAD, hold R2 → RESET
-//         if (lift_mode == SCORE) {
-//             if (R2) {
-//                 if (r2HoldStart == 0) r2HoldStart = pros::millis();
-//                 uint32_t heldTime = pros::millis() - r2HoldStart;
-
-//                 if (heldTime > 500) {
-//                     lift_mode = RESET;
-//                     lift_target_position = RESET_POS;
-//                     manualOverride = false;
-//                     autonomousMode = false;
-//                     r2HoldStart = 0;
-//                     std::cout << "[Driver] R2 held in SCORE → RESET\n";
-//                 }
-//             } else if (r2HoldStart != 0) {
-//                 // Released before 500ms → treat as tap
-//                 lift_mode = LOAD;
-//                 lift_target_position = LOAD_POS;
-//                 manualOverride = false;
-//                 autonomousMode = false;
-//                 std::cout << "[Driver] R2 tap in SCORE → LOAD\n";
-//                 r2HoldStart = 0;
-//             }
-//         } else if (lift_mode == RESET && R2) {
-//             // Optional long press for RESET mode
-//             if (r2HoldStart == 0) r2HoldStart = pros::millis();
-//             if (pros::millis() - r2HoldStart > 500) {
-//                 lift_target_position = RESET_POS;
-//                 r2HoldStart = 0;
-//             }
-//         } else {
-//             r2HoldStart = 0;
-//         }
-
-//         // Manual override control in SCORE mode
-//         if (lift_mode == SCORE && manualOverride) {
-//             if (L2) {
-//                 Motor::lbL.move(127);
-//                 Motor::lbR.move(127);
-//             } else if (R2) {
-//                 Motor::lbL.move(-127); 
-//                 Motor::lbR.move(-127);
-//             } else {
-//                 Motor::lbL.set_brake_mode(Misc::brakeState);
-//                 Motor::lbR.set_brake_mode(Misc::brakeState);
-//                 Motor::lbL.brake();
-//                 Motor::lbR.brake();
-//             }
-//             return;
-//         }
-
-//         // PID control for other modes
-//         updatePID();
-//     }
-
-
-
-//     void lift() {
-//         if (autonomousMode) updatePID();
-//         else driverControl();
-
-//         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2) ||
-//             controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-//             autonomousMode = false;
-//         }
-//     }
-// } // namespace Lift
-
-
 namespace Lift {
     enum LiftMode { RESET, LOAD, SCORE };
     LiftMode lift_mode = RESET;
@@ -392,30 +247,57 @@ namespace Lift {
     }
 } // namespace Lift
 
+//<------------------------------------------------------------- Anti Jam ------------------------------------------------------------->
+namespace Jam{
+    int counter = 0;
+    bool stuck = false;
+    void antiJam(){
+        if(TaskHandler::antiJam){
+            counter+=Misc::DELAY;
+            if(Motor::intake.get_actual_velocity() == 0 && counter > 300) stuck = true;
+            if (stuck == true) {
+                // TaskHandler::colorSort = false;
+                // TaskHandler::autoIntake = false;
+                Motor::intake.move(-127);
+                pros::delay(100);
+                Motor::intake.move(127);
+                stuck = false;
+                counter = 0;  
+                // TaskHandler::colorSort = true;
+                // TaskHandler::autoIntake = true;
+            }
+            // if(std::abs(Motor::intake.get_target_velocity()) - std::abs(Motor::intake.get_actual_velocity()) > 450 && counter > 200){
+            //     Motor::intake.move(-80);
+            //     pros::delay(250);
+            //     Motor::intake.move(127);
+            //     counter = 0;
+            // }
+        }
+    }
+}
 
-bool info = false;
-// <------------------------------------------------------------- Color Sort ------------------------------------------------------------->
+//<------------------------------------------------------------- Color Sort ------------------------------------------------------------->
 namespace Color {
     enum class colorVals { NONE, BLUE, RED };
     colorVals state = colorVals::NONE;
     bool isDone = false;
-    constexpr double rLow = 8.0, rHigh = 20.0, bLow = 175.0, bHigh = 200.0, minProx= 225; // Values for colorSort
-    constexpr double rLow1 = 9.0, rHigh1 = 20.0, bLow1 = 175.0, bHigh1 = 230.0, minProx1 = 150; // Values for ring store on intake
+    constexpr double rLow = 8.0, rHigh = 20.0, bLow = 175.0, bHigh = 200.0, minProx= 80; // Values for colorSort
+    constexpr double rLow1 = 9.0, rHigh1 = 20.0, bLow1 = 175.0, bHigh1 = 230.0, minProx1 = 80; // Values for ring store on intake
     inline bool isRed(double h, double low, double max) { return h > low && h < max; }
     inline bool isBlue(double h, double low, double max) { return h > low && h < max; }
     inline bool withinProx(int input, double max) { return (input > max); }
     colorVals colorConvertor(colorVals input) { return (input == colorVals::BLUE) ? colorVals::RED : colorVals::BLUE; }
     void colorSort(colorVals input) {
         colorVals lastColor = colorVals::NONE;
-        Sensor::o_colorSort.set_led_pwm(100);
-        Sensor::o_colorSort.set_integration_time(10);
+        // Sensor::o_colorSort.set_led_pwm(100);
+        // Sensor::o_colorSort.set_integration_time(10);
         // controller.clear();
-        while (1) {
+        if(TaskHandler::colorSort){
             if(isRed(Sensor::o_colorSort.get_hue(),rLow,rHigh) && withinProx(Sensor::o_colorSort.get_proximity(),minProx)) { lastColor = colorVals::RED; } 
             else if(isBlue(Sensor::o_colorSort.get_hue(),bLow,bHigh) && withinProx(Sensor::o_colorSort.get_proximity(),minProx)) { lastColor = colorVals::BLUE; }
             if(input == lastColor){
                 TaskHandler::dIntake = false;
-                pros::delay(86);
+                // pros::delay(86);
                 Motor::intake.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
                 Motor::intake.brake();
                 Motor::intake.move(-5);
@@ -426,7 +308,6 @@ namespace Color {
                 Motor::intake.move(TaskHandler::sharedSpeed);
                 lastColor = colorVals::NONE;
             } 
-            pros::delay(Misc::DELAY);
         }
     }
 
@@ -568,8 +449,8 @@ namespace Auton{
         namespace Qual{
             void neg(){
                 Color::state = Color::colorVals::BLUE;
-                chassis.setPose(-53.6,13.5,-106);
-                Misc::cdrift(45,45);
+                chassis.setPose(-52.16,11.95,-110.9);
+                Misc::cdrift(46,46);
                 Lift::setState(1500);
                 Piston::lightsaberL.set_value(true);
                 pros::delay(200);
@@ -582,24 +463,25 @@ namespace Auton{
                 Piston::mogo.set_value(true);
                 pros::delay(100);
                 Motor::intake.move(127);
-                chassis.turnToPoint(-12, 31, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
-                chassis.moveToPoint(-12, 31, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                chassis.turnToPoint(-12, 29, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.moveToPoint(-12, 29, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
 
-                chassis.moveToPose(-7,58,0,2500,{.horizontalDrift=9,.lead=0.6,.maxSpeed=127,.minSpeed=10});
+                chassis.moveToPose(-5.5,62,0,2000,{.horizontalDrift=12,.lead=0.7,.maxSpeed=127,.minSpeed=10});
                 chassis.waitUntilDone();
-                pros::delay(150);
+                pros::delay(100);
 
-                chassis.moveToPoint(-24, 24, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
-                chassis.turnToPoint(-24, 52, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0});
-                chassis.moveToPoint(-24, 52, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                chassis.moveToPoint(-24, 32, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                chassis.turnToPoint(-23, 54, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.moveToPoint(-23, 54, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
                 chassis.waitUntilDone();
                 
                 chassis.moveToPoint(-24, 24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
                 chassis.turnToPoint(0, 0, 1200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
                 chassis.waitUntilDone();
+                Misc::cdrift(25,25);
+                pros::delay(300);
                 Lift::setState(1200);
-                Misc::cdrift(20,20);
-                pros::delay(500);
+                pros::delay(300);
                 Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
                 Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
                 pros::delay(700);
@@ -610,11 +492,103 @@ namespace Auton{
 
             }
             void solo(){
+                Color::state = Color::colorVals::BLUE;
+                chassis.setPose(-52.16,11.95,-110.9);
+                Misc::cdrift(46,46);
+                Lift::setState(1500);
+                Piston::lightsaberL.set_value(true);
+                pros::delay(200);
+                Misc::cdrift(0,0);
+                Piston::lightsaberL.set_value(false);
+                pros::delay(300);
+                Lift::setState(0);
+                chassis.moveToPoint(-22, 25, 2000,{.forwards = false,.maxSpeed = 75});
+                chassis.waitUntilDone();
+                Piston::mogo.set_value(true);
+                pros::delay(100);
+                Motor::intake.move(127);
 
+                chassis.turnToPoint(-7, 40, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.moveToPoint(-7, 40, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+
+                // chassis.turnToPoint(-12, 29, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                // chassis.moveToPoint(-12, 29, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+
+                // chassis.moveToPose(-5.5,62,0,2000,{.horizontalDrift=12,.lead=0.7,.maxSpeed=127,.minSpeed=10});
+                chassis.waitUntilDone();
+                pros::delay(150);
+
+                chassis.moveToPoint(-24, 32, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                chassis.turnToPoint(-23, 54, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.moveToPoint(-23, 54, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                chassis.turnToPoint(-48, 24, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.moveToPoint(-48, 24, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+
+                chassis.turnToPoint(-48, -24, 800, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.waitUntilDone();
+                Piston::mogo.set_value(false);
+                TaskHandler::colorSort = false;
+                TaskHandler::autoIntake = true;
+                Motor::intake.move(65);
+                chassis.moveToPoint(-48, -24, 2500, {.forwards = true,.maxSpeed=70,.minSpeed = 10,.earlyExitRange=1});
+                chassis.turnToPoint(-23, -22, 900, {.forwards = false,.maxSpeed=127,.minSpeed=0});
+                chassis.moveToPoint(-23, -22, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                chassis.waitUntilDone();
+                Piston::mogo.set_value(true);
+                pros::delay(100);
+                Motor::intake.move(127);
+                TaskHandler::colorSort = true;
+
+                chassis.turnToPoint(-25, -50, 900, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.moveToPoint(-25, -50, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                chassis.waitUntilDone();
+                pros::delay(150);
+                chassis.turnToPoint(-15, -18, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.moveToPoint(-15, -18, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                Lift::setState(1200);
             }
         } // namespace Qual
         namespace Elim{
             void neg(){
+                Color::state = Color::colorVals::BLUE;
+                chassis.setPose(-52.16,11.95,-110.9);
+                Misc::cdrift(46,46);
+                Lift::setState(1500);
+                Piston::lightsaberL.set_value(true);
+                pros::delay(200);
+                Misc::cdrift(0,0);
+                Piston::lightsaberL.set_value(false);
+                pros::delay(300);
+                Lift::setState(0);
+                
+                chassis.moveToPoint(-22, 25, 2000,{.forwards = false,.maxSpeed = 75});
+                chassis.waitUntilDone();
+                Piston::mogo.set_value(true);
+                pros::delay(100);
+                Motor::intake.move(127);
+                chassis.turnToPoint(-12, 29, 650, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.moveToPoint(-12, 29, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+
+                chassis.moveToPose(-5.5,62,0,2000,{.horizontalDrift=12,.lead=0.7,.maxSpeed=127,.minSpeed=10});
+                chassis.waitUntilDone();
+                pros::delay(150);
+
+                chassis.moveToPoint(-24, 24, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                chassis.turnToPoint(-23, 54, 350, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.moveToPoint(-23, 54, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                chassis.waitUntilDone();
+                
+                chassis.moveToPoint(-24, 24, 1200, {.forwards = false,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
+                chassis.turnToPoint(0, 0, 1200, {.forwards = true,.maxSpeed=127,.minSpeed=0});
+                chassis.waitUntilDone();
+                Misc::cdrift(25,25);
+                pros::delay(300);
+                Lift::setState(1200);
+                pros::delay(300);
+                Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+                Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+                pros::delay(700);
+                Misc::cdrift(0,0);
 
             }
             void pos(){//3 Top Ring (2 Mogo & 1 Wall stake)
@@ -922,12 +896,11 @@ namespace Screen {
     void update() {
         controller.clear();  
         pros::delay(500);
-        // controller.set_text(0, 0, "Sensed?: " + std::to_string(info) + "Speed" + std::to_string(Color::lastSpeed));
-        // controller.set_text(0, 0, "1: " + std::to_string(Sensor::d_colorSort.get_distance()));
+        controller.set_text(0, 0, "1: " + std::to_string(Sensor::o_colorSort.get_proximity()));
         // controller.set_text(0, 0, "Pos: " + std::to_string(Motor::lbL.get_position()));
         // controller.set_text(0, 0, "Dist: " + std::to_string(leftMotors.get_position()));
         // controller.set_text(0, 0, "Run Time: " + std::to_string(pros::millis() / 1000) + "s");
-        controller.set_text(0, 0, "X: " + std::to_string(chassis.getPose().x) + "\nY: " + std::to_string(chassis.getPose().y));
+        // controller.set_text(0, 0, "X: " + std::to_string(chassis.getPose().x) + "\nY: " + std::to_string(chassis.getPose().y));
         controller.set_text(1, 0, "Test Text 1");
         controller.set_text(2, 0, "Test Text 2");
         // controller.set_text(3, 0, "Drive Left Temp: " + std::to_string(leftMotors.get_temperature()) + "C");
@@ -974,8 +947,8 @@ void initialize() {
     chassis.calibrate(); 
     Motor::lbL.set_zero_position(0.0);
     Motor::lbR.set_zero_position(0.0);
-    // Sensor::o_colorSort.set_led_pwm(100);
-    // Sensor::o_colorSort.set_integration_time(10);
+    Sensor::o_colorSort.set_led_pwm(100);
+    Sensor::o_colorSort.set_integration_time(10);
     Motor::intake.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     // controller.clear();
     // lv_img_set_src(sbg, &tdbg);
@@ -994,7 +967,7 @@ void initialize() {
     });
     pros::Task autonSelect([]{ while(1){ if(TaskHandler::autonSelect) autonSwitch(); pros::delay(Misc::DELAY); }});
     pros::Task liftC([]{ while (1) { if(TaskHandler::lbD) Lift::lift(); pros::delay(Misc::DELAY); }});
-    // pros::Task screenC([]{ while (1) { Screen::update(); pros::delay(100); }});
+    pros::Task screenC([]{ while (1) { Screen::update(); pros::delay(100); }});
 }
 void disabled() {}
 void competition_initialize() {}
@@ -1003,63 +976,14 @@ ASSET(example_txt); // PP
 // <------------------------------------------------------------- Autonomous ------------------------------------------------------------->
 void autonomous() {
     // Color::state = Color::colorVals::RED;
-    // Piston::mogo.set_value(true);
-    pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state); pros::delay(Misc::DELAY); }});
+    TaskHandler::antiJam = true;
+    pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state);  pros::delay(Misc::DELAY); }});
     pros::Task toPosC([&](){ while(1) { Color::toPos(Color::colorConvertor(Color::state)); pros::delay(Misc::DELAY); }});
-    // Motor::intake.move(127);
-    // Lift::setState(1225);
-    // pros::delay(1000);
-    // Lift::setState(400);
-    // Color::state = Color::colorVals::RED;
-    // Motor::intake.move(127);
-    // TaskHandler::autoIntake = true;
-    // chassis.setPose(0,0,0);
+    pros::Task antiJam([&](){ while(1) { Jam::antiJam(); pros::delay(Misc::DELAY); }});
+    Sensor::o_colorSort.set_led_pwm(100);
 
-    // chassis.moveToPoint(0, 24, 10000);
-    // chassis.moveToPoint(0, 24, 2000, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
-    // chassis.turnToPoint(0, 0, 2000, {.forwards = true,.maxSpeed=127,.minSpeed=10,.earlyExitRange=1});
-    // chassis.moveToPoint(0, 0, 2000, {.forwards = true,.maxSpeed=100,.minSpeed = 10,.earlyExitRange=1});
-    // chassis.turnToHeading(0, 2000, {.minSpeed=10,.earlyExitRange=1});
-    // chassis.turnToPoint(24, 24, 300, {.forwards = false,.maxSpeed=127,.minSpeed=0});
-    // chassis.moveToPoint(24, 24, 1500, {.forwards = false,.maxSpeed=79,.minSpeed = 10,.earlyExitRange=1});
-    // chassis.turnToPoint(0, 0, 450, {.forwards = false,.maxSpeed=127,.minSpeed=0});
-    // chassis.moveToPoint(0, 0, 1500, {.forwards = false,.maxSpeed=79,.minSpeed = 10,.earlyExitRange=1});
-    // chassis.turnToHeading(0, 1000, {.minSpeed=10,.earlyExitRange=1});
-
-    // chassis.moveToPose(0, 24, 0, 1500);
-    // chassis.turnToHeading(90,10000);
-    // chassis.turnToHeading(0,10000);
-    // chassis.moveToPose(0, 0, 0, 4000);
-    // controller.set_text(1, 0, "Test Text 1"); 
-    // //Auton::Test::main(); 
-    // Lift::setState(Lift::LOAD_POS);
-    // pros::delay(1000);
-    // Lift::setState(900);
-    // pros::delay(1000);
-    // Lift::setState(Lift::RESET_POS);
-
-    // chassis.setPose(0,0,0);
-    // chassis.setBrakeMode(pros::E_MOTOR_BRAKE_HOLD);
-    // chassis.turnToHeading(90,4000);
-    // chassis.turnToHeading(180,4000);
-    // chassis.turnToHeading(270,4000);
-    // chassis.turnToHeading(0,4000);
-
-    // Lift::setState(60);
-
-    // TaskHandler::lbD = false;
-    // Motor::lbL.move(-127);
-    // Motor::lbR.move(-127);
-    // pros::delay(175);
-    // Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-    // Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-    // Motor::lbL.brake();
-    // Motor::lbR.brake();
-    
-    // Hang::pull();
-    // Hang::release();
-
-    Auton::Red::Qual::neg();
+    // Auton::Red::Qual::neg();
+    Auton::Red::Qual::solo();
     // Auton::Skills::main();
     pros::delay(10000000);
     (Auton::state < autonRoutines.size()) ? autonRoutines[Auton::state].second() : Auton::Test::main();
@@ -1071,7 +995,7 @@ void opcontrol() {
     // TaskHandler::autonSelect = true;
     // pros::Task sorterTask([&](){ Color::colorSort(Color::colorVals::RED); pros::delay(Misc::DELAY); });
     // pros::Task sorterTask([](){ Color::colorSort(Color::colorVals::BLUE); });
-    static pros::Task sorterTask([](){ Color::colorSort(Color::colorConvertor(Color::state)); });
+    // static pros::Task sorterTask([](){ Color::colorSort(Color::colorConvertor(Color::state)); });
     // pros::Task toPosC([&](){ while(1) { if(TaskHandler::dIntake) Driver::intake(); pros::delay(Misc::DELAY); }});
     // Motor::intake.move(127);
     pros::Task intakeTask(Driver::intake);
