@@ -1510,18 +1510,19 @@ ASSET(example_txt); // PP
 
 // <------------------------------------------------------------- Autonomous ------------------------------------------------------------->
 void autonomous() {
-    Color::state = Color::colorVals::BLUE;
-    TaskHandler::antiJam = true;
-    pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state);  pros::delay(5); }});
-    pros::Task toPosC([&](){ while(1) { Color::toPos(Color::colorConvertor(Color::state)); pros::delay(5); }});
-    pros::Task antiJam([&](){ while(1) { Jam::antiJam(); pros::delay(Misc::DELAY); }});
+    // Color::state = Color::colorVals::BLUE;
+    // TaskHandler::antiJam = true;
+    // pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state);  pros::delay(5); }});
+    // pros::Task toPosC([&](){ while(1) { Color::toPos(Color::colorConvertor(Color::state)); pros::delay(5); }});
+    // pros::Task antiJam([&](){ while(1) { Jam::antiJam(); pros::delay(Misc::DELAY); }});
+    screen();
     // Sensor::o_colorSort.set_led_pwm(100);
     // Motor::intake.move(127);
     // Piston::mogo.set_value(true);
     // Auton::Red::Qual::negNormal2();
     // Auton::Red::Elim::negCloseWall2();
     // Auton::Red::Qual::solo3();
-    Auton::Red::Qual::pos();
+    // Auton::Red::Qual::pos();
     // Auton::Skills::main();
     pros::delay(10000000);
     (Auton::state < autonRoutines.size()) ? autonRoutines[Auton::state].second() : Auton::Test::main();

@@ -1,4 +1,5 @@
 #include "main.h"
+#include "config.h"
 #include "liblvgl/llemu.h"
 #include <string>
 
@@ -62,7 +63,7 @@ void screen(){
 		lv_obj_add_style(bar1, &Genesis_blue, LV_PART_INDICATOR);
 		lv_obj_set_size(bar1, 158 ,13);
 		lv_obj_set_pos (bar1, 133, 25);
-		lv_bar_set_value(bar1, 70, LV_ANIM_ON);
+		lv_bar_set_value(bar1, 0, LV_ANIM_ON);
 
 		//2nd bar 
 		lv_obj_t *bar2bg = lv_bar_create(lv_scr_act());//pointer refers too a variable that stores memeroy address
@@ -209,7 +210,7 @@ void screen(){
 		lv_obj_set_style_radius(Bat_rec_indicator, 0, LV_PART_INDICATOR);
 		lv_obj_set_pos(Bat_rec_indicator, 25, 93);
 		lv_obj_set_size(Bat_rec_indicator, 75, 26);
-		lv_bar_set_value(Bat_rec_indicator, 100, LV_ANIM_OFF);
+		lv_bar_set_value(Bat_rec_indicator, pros::battery::get_capacity()*(1/12.8)*100, LV_ANIM_ON);
 		lv_obj_add_style(Bat_rec_indicator,&Genesis_blue ,LV_PART_INDICATOR);
 		lv_obj_set_style_radius(Bat_rec_indicator, 0, 0);
 
