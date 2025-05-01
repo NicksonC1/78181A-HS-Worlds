@@ -643,7 +643,7 @@ namespace Auton{
                 Misc::cdrift(0,0);
             }
 
-            void negNormal2(){
+            void negNormal2(){ // use
                 Color::state = Color::colorVals::BLUE;
                 chassis.setPose(-52.16,11.95,-110.9);
                 Misc::cdrift(55,55);
@@ -701,7 +701,7 @@ namespace Auton{
                 Misc::cdrift(0,0);
             }
 
-            void pos(){
+            void pos(){ // use
                 Color::state = Color::colorVals::BLUE;
                 chassis.setPose(-51.53,-10.35,-68.4);
                 Misc::cdrift(55,55);
@@ -902,7 +902,7 @@ namespace Auton{
                 chassis.moveToPoint(-15, -18, 1200, {.forwards = true,.maxSpeed=127,.minSpeed = 10,.earlyExitRange=1});
                 Lift::setState(1200);
             }
-            void solo3(){
+            void solo3(){ // use
                 Color::state = Color::colorVals::BLUE;
                 chassis.setPose(-52.16,11.95,-110.9);
                 Misc::cdrift(55,55);
@@ -1054,7 +1054,7 @@ namespace Auton{
 
             }
 
-            void negCloseWall2(){
+            void negCloseWall2(){ // keep testing
                 Color::state = Color::colorVals::BLUE;
                 chassis.setPose(-52.16,11.95,-110.9);
                 Misc::cdrift(55,55);
@@ -1186,7 +1186,7 @@ namespace Auton{
     } // namespace Red
     namespace Blue{
         namespace Qual{
-            void negNormal2(){
+            void negNormal2(){ // test
                 Color::state = Color::colorVals::BLUE;
                 chassis.setPose(52.16,11.95,110.9);
                 Misc::cdrift(55,55);
@@ -1243,10 +1243,10 @@ namespace Auton{
                 pros::delay(1400);
                 Misc::cdrift(0,0);
             }
-            void pos(){
+            void pos(){ // paste pos here later
 
             }
-            void solo3(){
+            void solo3(){ // test
                 Color::state = Color::colorVals::BLUE;
                 chassis.setPose(52.16,11.95,110.9);
                 Misc::cdrift(55,55);
@@ -1339,7 +1339,7 @@ namespace Auton{
         } // namespace Elim
     } // namespace Blue   
     namespace Skills{
-        void main(){
+        void main(){ // main code
             Color::state = Color::colorVals::BLUE;
             chassis.setPose(-55.5,-5.85,325);
             Lift::setState(1500);
