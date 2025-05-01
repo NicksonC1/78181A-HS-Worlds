@@ -19,7 +19,7 @@ namespace Motor{
 } // namespace Motor
 
 namespace Sensor{
-  pros::Distance lbD(6);
+  pros::Distance lbD(5);
   pros::Optical o_colorSort(10);
   // pros::Optical d_colorSort(10);
   pros::adi::DigitalIn autonSwitch('A');
