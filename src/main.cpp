@@ -1124,7 +1124,7 @@ namespace Auton{
                 chassis.moveToPoint(-61, -42, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 20,.earlyExitRange=2});
                 
             }
-            void pos(){//3 Top Ring (2 Mogo & 1 Wall stake)
+            void pos(){ // never tested
                 Color::state = Color::colorVals::BLUE;
                 TaskHandler::autoIntake = true;
                 chassis.setPose(-57,-36, 108);
