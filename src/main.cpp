@@ -397,55 +397,6 @@ namespace Hang{
         leftMotors.brake();
         rightMotors.brake();
     }
-
-    void pull3(){//dont look
-        int timer = 0;
-        TaskHandler::lbD = false;
-        leftMotors.set_zero_position_all(0.0);
-        rightMotors.set_zero_position_all(0.0);
-        TaskHandler::isDriver = false;
-        leftMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        rightMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST); Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        do{
-            leftMotors.move(-127);
-            rightMotors.move(-127);
-            if(timer > 2750) break;
-            timer+=Misc::DELAY;
-            pros::delay(Misc::DELAY);
-        }
-        while(Sensor::lbD.get_distance() > 54);
-        Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST); Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
-        rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
-        leftMotors.brake();
-        rightMotors.brake();
-    }
-
-    void pull4(){
-        int timer = 0;
-        TaskHandler::lbD = false;
-        Motor::lbL.brake(); Motor::lbR.brake(); 
-        leftMotors.set_zero_position_all(0.0);
-        rightMotors.set_zero_position_all(0.0);
-        TaskHandler::isDriver = false;
-        leftMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        rightMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        do{
-            // Motor::lbL.brake(); Motor::lbR.brake(); 
-            leftMotors.move(-127);
-            rightMotors.move(-127);
-            if(timer > 3000) break;
-            timer+=Misc::DELAY;
-            pros::delay(Misc::DELAY);
-        }
-        while((leftMotors.get_actual_velocity() != 0));
-        leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
-        rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
-        leftMotors.brake();
-        rightMotors.brake();
-    }
-
     void pull5(){
         int timer = 0, counter = 0;
         TaskHandler::lbD = false;
@@ -503,103 +454,10 @@ namespace Hang{
         // controller.set_text(0, 0, "Pos: " + std::to_string(leftMotors.get_position()));
         leftMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
         rightMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        // Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        // Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        // Lift::setState(400);
-        // pros::delay(200);
         TaskHandler::lbD = false;
         Motor::lbL.move(-127);
         Motor::lbR.move(-127);
         pros::delay(175);
-        Motor::lbL.brake();
-        Motor::lbR.brake();
-        // Motor::lbL.move(-25);
-        // Motor::lbR.move(-25);
-        TaskHandler::isDriver = true;
-        if(controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y) < -50) return;
-    }
-
-    void first(){
-        int timer = 0;
-        leftMotors.set_zero_position_all(0.0);
-        rightMotors.set_zero_position_all(0.0);
-        TaskHandler::isDriver = false;
-        leftMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        rightMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        do{
-            leftMotors.move(-127);
-            rightMotors.move(-127);
-            if(timer > 4000) break;
-            timer+=Misc::DELAY;
-            pros::delay(Misc::DELAY);
-        }
-        while(leftMotors.get_position() > TARGET_PULL2);
-        leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
-        rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
-        leftMotors.brake();
-        rightMotors.brake();
-    }
-
-    void pull2(){
-        int timer = 0;
-        leftMotors.set_zero_position_all(0.0);
-        rightMotors.set_zero_position_all(0.0);
-        TaskHandler::isDriver = false;
-        leftMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        rightMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        do{
-            leftMotors.move(-127);
-            rightMotors.move(-127);
-            if(timer > 3500) break;
-            timer+=Misc::DELAY;
-            pros::delay(Misc::DELAY);
-        }
-        while(leftMotors.get_position() > TARGET_PULL);
-        leftMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
-        rightMotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
-        leftMotors.brake();
-        rightMotors.brake();
-    }
-
-    void release2(){
-        int timer = 0;
-        // controller.clear();
-        TaskHandler::lbD = true;
-        TaskHandler::isDriver = false;
-        leftMotors.set_zero_position_all(0.0);
-        rightMotors.set_zero_position_all(0.0);
-        leftMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        rightMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        // leftMotors.move(75);
-        // rightMotors.move(75);
-        // pros::delay(100);
-        Lift::setState(850);
-        do{
-            if(timer > 850) break;
-            currPos = leftMotors.get_position();
-            if (std::abs(TARGET_RELEASE - currPos) < 5) break;
-            double velocity = (TARGET_RELEASE - currPos)*kP;
-            //leftMotors.move(127);
-            //rightMotors.move(127);
-            leftMotors.move(velocity);
-            rightMotors.move(velocity);
-            timer+=Misc::DELAY;
-            pros::delay(Misc::DELAY);
-        }
-        while(currPos < TARGET_RELEASE);
-        // controller.set_text(0, 0, "Pos: " + std::to_string(leftMotors.get_position()));
-        leftMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        rightMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        // Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        // Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        // Lift::setState(400);
-        // pros::delay(200);
-        TaskHandler::lbD = false;
-        Motor::lbL.move(-127);
-        Motor::lbR.move(-127);
-        pros::delay(175);
-        Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
-        Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
         Motor::lbL.brake();
         Motor::lbR.brake();
         // Motor::lbL.move(-25);
