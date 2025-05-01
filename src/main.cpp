@@ -478,7 +478,7 @@ namespace Hang{
 
 // <-------------------------------------------------------------- Auto Routes ----------------------------------------------------------->
 namespace Auton{
-    int state = 0;
+    extern int state = 0;
     namespace Test{
         void main() { 
 
@@ -486,7 +486,8 @@ namespace Auton{
         void coords(){ 
             points.emplace_back(-24,24);
             points.emplace_back(-7,41);
-            points.emplace_back(24,48);
+
+            / points.emplace_back(24,48);
             Misc::chain(points); // vec, angular timeout, lateral timeout
         }
         void linear(){
@@ -515,6 +516,7 @@ namespace Auton{
                 chassis.waitUntilDone();
                 Piston::mogo.set_value(true);
                 pros::delay(100);
+            
                 Motor::intake.move(127);
                 chassis.turnToPoint(-7, 38, 650, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=1});
                 chassis.moveToPoint(-7, 38, 800, {.forwards = true,.maxSpeed=127,.minSpeed = 47.5,.earlyExitRange=1});
@@ -1550,32 +1552,39 @@ lv_obj_t * slogo = lv_img_create(lv_scr_act());
 // <------------------------------------------------------------ Initialize --------------------------------------------------------------->
 void initialize() {
     // pros::Task t_Select(autonSelectSwitch);
-    pros::lcd::initialize();
-    chassis.setPose(0, 0, 0);
-    chassis.calibrate(); 
-    Motor::lbL.set_zero_position(0.0);
-    Motor::lbR.set_zero_position(0.0);
-    Sensor::o_colorSort.set_led_pwm(100);
-    Sensor::o_colorSort.set_integration_time(5);
-    Motor::intake.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+
+    // pros::lcd::initialize();
+    // chassis.setPose(0, 0, 0);
+    // chassis.calibrate(); 
+    // Motor::lbL.set_zero_position(0.0);
+    // Motor::lbR.set_zero_position(0.0);
+    // Sensor::o_colorSort.set_led_pwm(100);
+    // Sensor::o_colorSort.set_integration_time(5);
+    // Motor::intake.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     
     // controller.clear();
     // lv_img_set_src(sbg, &tdbg);
 	// lv_obj_set_pos(sbg,0,0);
 	// lv_img_set_src(slogo, &logo);
 	// lv_obj_set_pos(slogo,105,-15);
-    pros::Task screenTask([&]() {
-        while (1) {
-            // pros::lcd::print(3, "Pos: %d", Sensor::lbR.get_position());
-            // pros::lcd::print(3, "Pos: %f", Motor::lb.get_position());
-            pros::lcd::print(0, "X: %f", chassis.getPose().x);
-            pros::lcd::print(1, "Y: %f", chassis.getPose().y);
-            pros::lcd::print(2, "Theta: %f", chassis.getPose().theta);
-            pros::delay(50);
-        }
+    set_up();
+    pros::Task LVGL_upd([&]() {
+        screen_upd();
     });
+
+    // pros::Task screenTask([&]() {
+    //     while (1) {
+    //         // pros::lcd::print(3, "Pos: %d", Sensor::lbR.get_position());
+    //         // pros::lcd::print(3, "Pos: %f", Motor::lb.get_position());
+    //         pros::lcd::print(0, "X: %f", chassis.getPose().x);
+    //         pros::lcd::print(1, "Y: %f", chassis.getPose().y);
+    //         pros::lcd::print(2, "Theta: %f", chassis.getPose().theta);
+    //         pros::delay(50);
+    //     }
+    // });
+
     pros::Task autonSelect([]{ while(1){ if(TaskHandler::autonSelect) autonSwitch(); pros::delay(Misc::DELAY); }});
-    pros::Task liftC([]{ while (1) { if(TaskHandler::lbD) Lift::lift(); pros::delay(Misc::DELAY); }});
+    // pros::Task liftC([]{ while (1) { if(TaskHandler::lbD) Lift::lift(); pros::delay(Misc::DELAY); }});
     // pros::Task screenC([]{ while (1) { Screen::update(); pros::delay(100); }});
 }
 void disabled() {}
@@ -1589,7 +1598,6 @@ void autonomous() {
     // pros::Task sorterC([&](){ while(1) { Color::colorSort(Color::state);  pros::delay(5); }});
     // pros::Task toPosC([&](){ while(1) { Color::toPos(Color::colorConvertor(Color::state)); pros::delay(5); }});
     // pros::Task antiJam([&](){ while(1) { Jam::antiJam(); pros::delay(Misc::DELAY); }});
-    screen();
     // Sensor::o_colorSort.set_led_pwm(100);
     // Motor::intake.move(127);
     // Piston::mogo.set_value(true);

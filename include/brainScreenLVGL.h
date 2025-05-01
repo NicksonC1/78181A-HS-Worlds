@@ -2,4 +2,5 @@
 
 extern int autonState;
 
-void screen();
+void screen_upd();
+void set_up();
