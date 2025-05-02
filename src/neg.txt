@@ -1,0 +1,59 @@
+Color::state = Color::colorVals::BLUE;
+chassis.setPose(-51.09,13.04,-110.96);
+Misc::cdrift(60,60);
+Lift::setState(1300);
+
+Motor::intake.move(-70);
+pros::delay(200);
+Piston::lightsaberL.set_value(true);
+Misc::cdrift(0,0);
+
+pros::delay(300);
+Piston::lightsaberL.set_value(false);
+Motor::intake.move(0);
+Misc::cdrift(0,0);
+Lift::setState(0);
+pros::delay(50);
+chassis.moveToPoint(-20, 25, 1300, {.forwards = false,.maxSpeed=90,.minSpeed = 20,.earlyExitRange=1});
+chassis.waitUntilDone();
+Piston::mogo.set_value(true);
+pros::delay(100);
+Motor::intake.move(127);
+chassis.turnToPoint(-7, 38, 650, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=1});
+chassis.moveToPoint(-7, 38, 800, {.forwards = true,.maxSpeed=127,.minSpeed=25,.earlyExitRange=1});
+
+chassis.turnToPoint(-5.5, 56, 200, {.forwards = true,.maxSpeed=127,.minSpeed=25,.earlyExitRange=2});
+chassis.moveToPoint(-5.5, 56, 1100, {.forwards = true,.maxSpeed=90,.minSpeed=25,.earlyExitRange=2});
+chassis.waitUntilDone();
+pros::delay(275);
+
+chassis.moveToPoint(-17, 33, 600, {.forwards = false,.maxSpeed=127,.minSpeed = 25,.earlyExitRange=2});
+chassis.turnToPoint(-24, 49, 450, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+chassis.moveToPoint(-24, 49, 1600, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+
+chassis.turnToPoint(-46.5, 50, 900, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+chassis.moveToPoint(-46.5, 50, 1200, {.forwards = true,.maxSpeed=90,.minSpeed=20,.earlyExitRange=2});
+chassis.waitUntilDone();
+TaskHandler::antiJam = false;
+// chassis.turnToHeading(315,900);
+chassis.turnToPoint(-71, 74, 1000, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+chassis.waitUntilDone();
+Misc::cdrift(80,80,1200);
+Misc::cdrift(-60,-60,650);
+pros::delay(50);
+Misc::cdrift(50,50,450);
+pros::delay(150);
+// Misc::cdrift(-25,-25,200);
+chassis.turnToHeading(135,1000);
+chassis.waitUntilDone();
+// Motor::intake.move(0);
+chassis.moveToPoint(-28, 28, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 20,.earlyExitRange=2});
+chassis.turnToHeading(135,1000);
+Lift::setState(1175);
+chassis.waitUntilDone();
+Misc::cdrift(30,30);
+pros::delay(700);
+Motor::lbL.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+Motor::lbR.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+pros::delay(1400);
+Misc::cdrift(0,0);

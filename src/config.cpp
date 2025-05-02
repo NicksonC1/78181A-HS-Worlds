@@ -19,9 +19,9 @@ namespace Motor{
 } // namespace Motor
 
 namespace Sensor{
-  pros::Distance lbD(5);
+  pros::Distance lbD(3);
   pros::Optical o_colorSort(10);
-  // pros::Optical d_colorSort(10);
+  pros::Distance d_colorSort(5);
   pros::adi::DigitalIn autonSwitch('A');
 } // namspace Sensor
 
@@ -48,7 +48,7 @@ class CustomIMU : public pros::IMU {
     const double m_scalar;
 };
 
-CustomIMU s_imu(21, 1.01265822785);
+CustomIMU s_imu(6, 1.01265822785);
 // pros::Imu imu(21);
 pros::Rotation horizontalEnc(17);
 pros::Rotation verticalEnc(15);
