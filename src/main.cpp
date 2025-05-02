@@ -644,7 +644,7 @@ namespace Hang{
         // pros::delay(100);
         Lift::setState(850);
         do{
-            if(timer > 1650) break;
+            if(timer > 1750) break;
             currPos = leftMotors.get_position();
             if (std::abs(TARGET_RELEASE - currPos) < 5) break;
             double velocity = (TARGET_RELEASE - currPos)*kP;
@@ -1641,7 +1641,7 @@ namespace Driver{
     void hang(){
         pros::motor_brake_mode_e_t brakeStateI = pros::E_MOTOR_BRAKE_COAST;
         while(1){
-            if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN) ) { Lift::setState(550); pros::delay(50); Misc::togglePiston(Piston::release, b_hang);   } 
+            if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN) ) { Lift::setState(550); pros::delay(50); Misc::togglePiston(Piston::release, b_hang); Lift::lift_kp_down_dist = 1; } 
             if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) { 
                 Misc::togglePiston(Piston::pto, b_pto); 
                 Misc::brakeState = (Misc::brakeState == pros::E_MOTOR_BRAKE_HOLD) ? pros::E_MOTOR_BRAKE_COAST : pros::E_MOTOR_BRAKE_HOLD;
