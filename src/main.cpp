@@ -94,9 +94,9 @@ namespace Lift {
     bool autonomousMode = false;
     bool manualOverride = false;
 
-    constexpr int RESET_POS = 0, SCORE_POS = 1050, LOAD_DIST_TARGET = 56; 
+    constexpr int RESET_POS = 0, SCORE_POS = 1050, LOAD_DIST_TARGET = 128; 
     double lift_kp_up_rot = 0.8, lift_kp_down_rot = 0.8, lift_kd_rot = 0.0;
-    double lift_kp_up_dist = 1.3, lift_kp_down_dist = 1.2, lift_kd_dist = 0.0;
+    double lift_kp_up_dist = 0.3, lift_kp_down_dist = 0.04, lift_kd_dist = 0.0;
     
     double dM = 1.0;
 
@@ -208,7 +208,7 @@ namespace Lift {
                 autonomousMode = false;
                 r2HoldStart = 0;
             }
-        } else if (lift_mode == RESET && R2) {
+        }else if (lift_mode == RESET && R2) {
             if (r2HoldStart == 0) r2HoldStart = pros::millis();
             if (pros::millis() - r2HoldStart > 500) {
                 lift_target_position = RESET_POS;
@@ -487,7 +487,7 @@ namespace Auton{
             points.emplace_back(-24,24);
             points.emplace_back(-7,41);
 
-            / points.emplace_back(24,48);
+            points.emplace_back(24,48);
             Misc::chain(points); // vec, angular timeout, lateral timeout
         }
         void linear(){
@@ -1556,8 +1556,8 @@ void initialize() {
     // pros::lcd::initialize();
     // chassis.setPose(0, 0, 0);
     // chassis.calibrate(); 
-    // Motor::lbL.set_zero_position(0.0);
-    // Motor::lbR.set_zero_position(0.0);
+    Motor::lbL.set_zero_position(0.0);
+    Motor::lbR.set_zero_position(0.0);
     // Sensor::o_colorSort.set_led_pwm(100);
     // Sensor::o_colorSort.set_integration_time(5);
     // Motor::intake.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
@@ -1571,6 +1571,7 @@ void initialize() {
     pros::Task LVGL_upd([&]() {
         screen_upd();
     });
+    TaskHandler::lbD =true;
 
     // pros::Task screenTask([&]() {
     //     while (1) {
@@ -1584,7 +1585,7 @@ void initialize() {
     // });
 
     pros::Task autonSelect([]{ while(1){ if(TaskHandler::autonSelect) autonSwitch(); pros::delay(Misc::DELAY); }});
-    // pros::Task liftC([]{ while (1) { if(TaskHandler::lbD) Lift::lift(); pros::delay(Misc::DELAY); }});
+    pros::Task liftC([]{ while (1) { if(TaskHandler::lbD) Lift::lift(); pros::delay(Misc::DELAY); }});
     // pros::Task screenC([]{ while (1) { Screen::update(); pros::delay(100); }});
 }
 void disabled() {}
