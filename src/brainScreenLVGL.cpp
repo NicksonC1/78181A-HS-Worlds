@@ -285,19 +285,19 @@ void screen_upd(){
 
 		if((RMotor[0])/45.0 >= 1){
 			Rtemp = 100;
-		} else Rtemp = (int)(RMotor[0]/45.0);
+		} else Rtemp = (int)((RMotor[0]/45.0)*100);
 
 		if((LMotor[0])/45.0 >= 1){
 			Ltemp = 100;
-		} else Ltemp = (int)(LMotor[0]/45.0);
+		} else Ltemp = (int)((LMotor[0]/45.0)*100);
 
 		if((LVGL_vals::intake)/45.0 >= 1){
 			intake = 100;
-		} else intake = (int)(intake/45.0);
+		} else intake = (int)((intake/45.0)*100);
 
 		if((LVGL_vals::lbAvg)/45.0 >= 1){
 			LVGL_vals::lbAvg = 100;
-		} else lb_temp = (int)(LVGL_vals::lbAvg/45.0);
+		} else lb_temp = (int)((LVGL_vals::lbAvg/45.0)*100);
 
 
 		lv_bar_set_value(bar1, Ltemp, LV_ANIM_ON);
@@ -313,6 +313,15 @@ void screen_upd(){
 		// LV_IMG_DECLARE(WORLDS_logo);
 		// lv_img_set_src(Wlogo, &WORLDS_logo);
 		// lv_obj_set_pos(Wlogo, 10, 3);
+		printf("Motor 1: %f\n", RMotor[0]);
+		printf("Motor 1 >> Rtemp: %f\n", Rtemp);
+
+		printf("Motor 2: %f\n", RMotor[1]);
+		printf("Motor 3: %f\n", RMotor[2]);
+
+		printf("Motor 4: %f\n", LMotor[0]);
+		printf("%f\n", LMotor[1]);
+		printf("%f\n", LMotor[2]);
 
 		lv_timer_handler();
 		pros::delay(50);
