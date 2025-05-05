@@ -285,19 +285,19 @@ void screen_upd(){
 
 		if((RMotor[0])/45.0 >= 1){
 			Rtemp = 100;
-		} else Rtemp = (int)((RMotor[0]/45.0)*100);
+		} else Rtemp = (int)((RMotor[0] - 35.0)*10);
 
 		if((LMotor[0])/45.0 >= 1){
 			Ltemp = 100;
-		} else Ltemp = (int)((LMotor[0]/45.0)*100);
+		} else Ltemp = (int)((LMotor[0] - 35.0)*10);
 
 		if((LVGL_vals::intake)/45.0 >= 1){
 			intake = 100;
-		} else intake = (int)((intake/45.0)*100);
+		} else intake = (int)((intake - 35.0)*10);
 
 		if((LVGL_vals::lbAvg)/45.0 >= 1){
-			LVGL_vals::lbAvg = 100;
-		} else lb_temp = (int)((LVGL_vals::lbAvg/45.0)*100);
+			lb_temp = 100;
+		} else lb_temp = (int)((LVGL_vals::lbAvg - 35.0)*10);
 
 
 		lv_bar_set_value(bar1, Ltemp, LV_ANIM_ON);

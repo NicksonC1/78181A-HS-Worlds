@@ -1810,11 +1810,12 @@ void autonSwitch() {
 
 Color::colorVals getColor(bool colorValV3) { return colorValV3 ? Color::colorVals::RED : Color::colorVals::BLUE; } // Sort ? Red : Blue
 
-LV_IMG_DECLARE(tdbg);
-LV_IMG_DECLARE(WORLDS_logo);
-LV_IMG_DECLARE(logo);	
+// LV_IMG_DECLARE(tdbg);
+// LV_IMG_DECLARE(WORLDS_logo);
+LV_IMG_DECLARE(WO_logo);
+LV_IMG_DECLARE(Final_log);
 
-lv_obj_t * sbg = lv_img_create(lv_scr_act());
+// lv_obj_t * sbg = lv_img_create(lv_scr_act());
 lv_obj_t * slogo = lv_img_create(lv_scr_act());
 lv_obj_t * Wlogo = lv_img_create(lv_scr_act());
 
@@ -1840,12 +1841,12 @@ void initialize() {
     // lv_img_set_src(sbg, &tdbg);
 	// lv_obj_set_pos(sbg,0,0);
 
-	// lv_img_set_src(slogo, &logo);
-	// lv_obj_set_pos(slogo,105,-15);
-    // // lv_img_set_size_mode(slogo, )
+	lv_img_set_src(slogo, &Final_log);
+	lv_obj_set_pos(slogo, 20, 15);
+    // lv_img_set_size_mode(slogo, )
     
-    // lv_img_set_src(Wlogo, &WORLDS_logo);
-    // lv_obj_set_pos(Wlogo, 10, 3);
+    // lv_img_set_src(Wlogo, &WO_logo);
+    // lv_obj_set_pos(Wlogo, 105, 3);
 
     // pros::Task screenTask([&]() {
     //     while (1) {
