@@ -1,0 +1,158 @@
+namespace Lift {
+    enum LiftMode { RESET, LOAD, SCORE };
+    LiftMode lift_mode = RESET;
+
+    int lift_target_position = 0;
+    bool autonomousMode = false;
+    bool manualOverride = false;
+
+    constexpr int RESET_POS = 0, SCORE_POS = 1050, LOAD_DIST_TARGET = 128; 
+    double lift_kp_up_rot = 0.8, lift_kp_down_rot = 0.8, lift_kd_rot = 0.0;
+    double lift_kp_up_dist = 0.3, lift_kp_down_dist = 0.04, lift_kd_dist = 0.0;
+    
+    double dM = 1.0;
+
+    static double lastError = 0;
+    static double lastTime = pros::millis();
+
+
+    void setState(int newTarget) {
+        lift_target_position = newTarget;
+        autonomousMode = true;
+        manualOverride = false;
+
+        if (newTarget >= 50 && newTarget <= 140) {
+            lift_mode = LOAD;
+        } else {
+            lift_mode = RESET;
+        }
+    }
+
+    double getLiftPosition() {
+        if (lift_mode == LOAD) return Sensor::lbD.get();
+        else return Motor::lbR.get_position();
+    }
+
+    void updatePID() {
+        double pos = getLiftPosition();
+        double target;
+        double kp_up, kp_down, kd;
+
+        if (lift_mode == LOAD) {
+            target = LOAD_DIST_TARGET;
+            kp_up = lift_kp_up_dist;
+            kp_down = lift_kp_down_dist;
+            kd = lift_kd_dist;
+        } else {
+            target = lift_target_position;
+            kp_up = lift_kp_up_rot;
+            kp_down = lift_kp_down_rot;
+            kd = lift_kd_rot;
+        }
+
+        double error = target - pos;
+        double dt = std::max((pros::millis() - lastTime) / 1000.0, 0.01);
+        double derivative = (error - lastError) / dt;
+
+        double velocity = (error > 0)
+            ? (kp_up * error)
+            : (kp_down * error) * dM;
+
+        velocity += kd * derivative;
+        velocity = std::clamp(velocity, -80.0, 80.0);
+
+        if (lift_mode != LOAD && target == RESET_POS && std::fabs(error) < 5) {
+            Motor::lbL.move(0);
+            Motor::lbR.move(0);
+        } else {
+            Motor::lbL.move(velocity);
+            Motor::lbR.move(velocity);
+        }
+
+        lastError = error;
+        lastTime = pros::millis();
+    }
+
+    void driverControl() {
+        static uint32_t r2HoldStart = 0;
+
+        bool L2_new = controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2);
+        bool L2 = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2);
+        bool R2 = controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2);
+
+        if (L2_new) {
+            if (lift_mode == RESET) {
+                lift_mode = LOAD;
+                manualOverride = false;
+                autonomousMode = false;
+            } else if (lift_mode == LOAD) {
+                lift_mode = SCORE;
+                manualOverride = true;
+                autonomousMode = false;
+            }
+        }
+
+        // Go from LOAD → RESET with R2
+        if (lift_mode == LOAD && R2) {
+            lift_mode = RESET;
+            lift_target_position = RESET_POS;
+            manualOverride = false;
+            autonomousMode = false;
+        }
+
+        if (lift_mode == SCORE) {
+            if (R2) {
+                if (r2HoldStart == 0) r2HoldStart = pros::millis();
+                uint32_t heldTime = pros::millis() - r2HoldStart;
+
+                if (heldTime > 500) {
+                    lift_mode = RESET;
+                    lift_target_position = RESET_POS;
+                    manualOverride = false;
+                    autonomousMode = false;
+                    r2HoldStart = 0;
+                }
+            } else if (r2HoldStart != 0) {
+                lift_mode = LOAD;
+                manualOverride = false;
+                autonomousMode = false;
+                r2HoldStart = 0;
+            }
+        }else if (lift_mode == RESET && R2) {
+            if (r2HoldStart == 0) r2HoldStart = pros::millis();
+            if (pros::millis() - r2HoldStart > 500) {
+                lift_target_position = RESET_POS;
+                r2HoldStart = 0;
+            }
+        } else {
+            r2HoldStart = 0;
+        }
+
+        if (lift_mode == SCORE && manualOverride) {
+            if (L2) {
+                Motor::lbL.move(127);
+                Motor::lbR.move(127);
+            } else if (R2) {
+                Motor::lbL.move(-127);
+                Motor::lbR.move(-127);
+            } else {
+                Motor::lbL.set_brake_mode(Misc::brakeState);
+                Motor::lbR.set_brake_mode(Misc::brakeState);
+                Motor::lbL.brake();
+                Motor::lbR.brake();
+            }
+            return;
+        }
+        updatePID();
+    }
+
+    void lift() {
+        if (autonomousMode) updatePID();
+        else driverControl();
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2) ||
+            controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+            autonomousMode = false;
+        }
+    }
+} // namespace Lift
