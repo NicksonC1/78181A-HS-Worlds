@@ -146,12 +146,18 @@ void set_up(){
 	lv_roller_set_options(autonroller,
 						"Default Auton\n"
 						"Solo Red\n"
-						"redNeg Qual\n"
-						"redPos- Qual\n"
+						"redNeg_Q\n"
+						"redPos_Q\n"
 
 						"Solo Blue\n"
-						"blueNegl\n"
-						"bluePos\n"
+						"blueNeg_Q\n"
+						"bluePos_Q\n"
+
+						"redPos_E\n"
+						"redNeg_E\n"
+
+						"bluePos_El\n"
+						"blueNeg_E\n"
 
 						"Skills\n",
 						LV_ROLLER_MODE_INFINITE);
