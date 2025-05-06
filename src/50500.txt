@@ -623,9 +623,7 @@ namespace Hang{
         rightMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
         leftMotors.move(127);
         rightMotors.move(127);
-        pros::delay(250);
-        leftMotors.move(0);
-        rightMotors.move(0);
+        pros::delay(150);
         Lift::setState(850);
         do{
             if(timer > 1750) break;
@@ -650,7 +648,11 @@ namespace Hang{
         Motor::lbL.brake();
         Motor::lbR.brake();
         TaskHandler::isDriver = true;
-        if(controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y) < -50) return;
+        TaskHandler::lbD = true;
+        if(controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y) < -50) {
+            TaskHandler::lbD = true;
+            return;
+        }
         // if(controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y) < -1 || controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y) > 1) {
         //     TaskHandler::lbD = true;
         //     return;
@@ -2145,8 +2147,8 @@ void autonomous() {
     // Sensor::o_colorSort.set_led_pwm(100);
     // Sensor::o_colorSort.set_integration_time(5);
     
-    // (autonState < autonRoutines.size()) ? autonRoutines[autonState].second() : Auton::Test::main();
-    Hang::climb();
+    (autonState < autonRoutines.size()) ? autonRoutines[autonState].second() : Auton::Test::main();
+    // Hang::climb();
     
     // Auton::Skills::main();
     // Auton::Red::Elim::negCloseWall();
