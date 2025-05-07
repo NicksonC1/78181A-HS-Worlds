@@ -1,0 +1,112 @@
+void negCloseWall(){ 
+                Color::state = Color::colorVals::RED;
+                chassis.setPose(51.09,13.04,110.96);
+                Misc::cdrift(60,60);
+                Lift::setState(1300);
+
+                Motor::intake.move(-70);
+                pros::delay(200);
+                Piston::lightsaberL.set_value(true);
+                Misc::cdrift(0,0);
+
+                pros::delay(300);
+                Piston::lightsaberL.set_value(false);
+                Motor::intake.move(0);
+                Misc::cdrift(0,0);
+                Lift::setState(0);
+                pros::delay(50);
+                chassis.moveToPoint(20, 25, 1300, {.forwards = false,.maxSpeed=90,.minSpeed = 20,.earlyExitRange=1});
+                chassis.waitUntilDone();
+                Piston::mogo.set_value(true);
+                pros::delay(100);
+                Motor::intake.move(127);
+                chassis.turnToPoint(7, 38, 650, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=1});
+                chassis.moveToPoint(7, 38, 800, {.forwards = true,.maxSpeed=127,.minSpeed=25,.earlyExitRange=1});
+
+                chassis.turnToPoint(6, 56, 200, {.forwards = true,.maxSpeed=127,.minSpeed=25,.earlyExitRange=2});
+                chassis.moveToPoint(6, 56, 1100, {.forwards = true,.maxSpeed=90,.minSpeed=25,.earlyExitRange=2});
+                chassis.waitUntilDone();
+                pros::delay(275);
+
+                chassis.moveToPoint(17, 33, 600, {.forwards = false,.maxSpeed=127,.minSpeed = 25,.earlyExitRange=2});
+                chassis.turnToPoint(24, 49, 450, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+                chassis.moveToPoint(24, 49, 1600, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+                chassis.waitUntil(9);
+                Lift::setState(128);
+                TaskHandler::antiJam = false;
+                // pros::delay(200);
+                chassis.waitUntilDone();
+                pros::delay(225);
+
+                chassis.turnToPoint(5, 65.5, 1100, {.forwards = true,.maxSpeed=127,.minSpeed=10,.earlyExitRange=0});
+                chassis.waitUntilDone();
+                // chassis.waitUntilDone();
+                chassis.moveToPoint(5, 65.5, 1200, {.forwards = true,.maxSpeed=90,.minSpeed=10,.earlyExitRange=1});
+                chassis.waitUntilDone();
+                Motor::intake.move(0);
+                Lift::setState(1550);
+                pros::delay(550);
+                Motor::intake.move(127);
+                Misc::cdrift(-75,-75,450);
+                Lift::setState(0);
+
+                chassis.turnToPoint(45, 50, 900, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+                chassis.moveToPoint(45, 50, 1200, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+                chassis.waitUntilDone();
+                TaskHandler::antiJam = false;
+
+                chassis.turnToPoint(71, 74, 450, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+                chassis.moveToPoint(71, 74, 1100, {.forwards = true,.maxSpeed=45,.minSpeed=20,.earlyExitRange=2});
+                chassis.waitUntil(8);
+                TaskHandler::antiJam = false;
+                TaskHandler::autoIntake2 = false;
+                chassis.waitUntilDone();
+                Misc::cdrift(50,50,400);
+                Misc::cdrift(-127,-127,400);
+                pros::delay(250);
+                Misc::cdrift(80,80,625);
+                pros::delay(115);
+
+                // chassis.turnToPoint(48, 49, 900, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+                // chassis.waitUntilDone();
+                // Motor::intake.move(127);
+                // chassis.moveToPoint(48, 50, 1200, {.forwards = true,.maxSpeed=90,.minSpeed=20,.earlyExitRange=2});
+                // chassis.waitUntilDone();
+                // TaskHandler::antiJam = false;
+
+                // chassis.turnToPoint(74, -74, 450, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+                // chassis.moveToPoint(74, -74, 1100, {.forwards = true,.maxSpeed=45,.minSpeed=20,.earlyExitRange=2});
+                // chassis.waitUntil(8);
+                // TaskHandler::antiJam = false;
+                // TaskHandler::autoIntake2 = false;
+                // chassis.waitUntilDone();
+                // Misc::cdrift(50,50,400);
+                // Misc::cdrift(-127,-127,400);
+                // pros::delay(250);
+                // Misc::cdrift(80,80,625);
+                // pros::delay(115);
+
+                // // chassis.turnToHeading(315,900);
+                // chassis.turnToPoint(71, 74, 1000, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+                // chassis.waitUntilDone();
+                // Misc::cdrift(80,80,850);
+                // Misc::cdrift(-75,-75,550);
+                // pros::delay(50);
+                // Misc::cdrift(55,55,550);
+                // pros::delay(150);
+
+                chassis.moveToPoint(43, 24, 1500, {.forwards = false,.maxSpeed=127,.minSpeed = 20,.earlyExitRange=2});
+                chassis.waitUntilDone();
+                Lift::setState(0);
+                chassis.turnToPoint(61, -42, 650, {.forwards = true,.maxSpeed=127,.minSpeed=20,.earlyExitRange=2});
+                chassis.waitUntilDone();
+                TaskHandler::colorSort = true;
+                Motor::intake.move(127);
+                // TaskHandler::autoIntake1 = true;
+                // TaskHandler::antiJam = false;
+                // Motor::intake.move(127);
+                chassis.moveToPoint(61, -42, 1500, {.forwards = true,.maxSpeed=127,.minSpeed = 20,.earlyExitRange=2});
+                chassis.waitUntil(15);
+                Motor::intake.move(0);
+                chassis.waitUntilDone();
+            }
