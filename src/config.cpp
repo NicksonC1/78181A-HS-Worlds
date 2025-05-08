@@ -26,11 +26,14 @@ namespace Sensor{
 } // namspace Sensor
 
 namespace Piston{
-  pros::adi::DigitalOut lightsaberL({9,'G'}); // checked
-  pros::adi::DigitalOut saberclamp('F'); // checked
+  pros::adi::DigitalOut lightsaberL('C'); // checked
+  pros::adi::DigitalOut lightsaberR('G'); 
+  // pros::adi::DigitalOut saberclamp('F'); // checked
   pros::adi::DigitalOut mogo({9,'H'}); // checked
-  pros::adi::DigitalOut pto('G'); // checked
-  pros::adi::DigitalOut release('H'); // checked
+  // pros::adi::DigitalOut pto('G'); // checked
+  // pros::adi::DigitalOut release('H'); // checked
+  pros::adi::DigitalOut colorSort('H'); 
+  pros::adi::DigitalOut tipper('B'); 
 } // namespace Piston
 
 // <------------------------------------------------------------- Odom Sensors ------------------------------------------------------------->

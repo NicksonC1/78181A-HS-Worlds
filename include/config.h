@@ -26,10 +26,13 @@ namespace Sensor{
 
 namespace Piston{
     extern pros::adi::DigitalOut lightsaberL;
-    extern pros::adi::DigitalOut saberclamp;
+    extern pros::adi::DigitalOut lightsaberR;
+    // extern pros::adi::DigitalOut saberclamp;
     extern pros::adi::DigitalOut mogo;
-    extern pros::adi::DigitalOut pto;
-    extern pros::adi::DigitalOut release;
+    // extern pros::adi::DigitalOut pto;
+    // extern pros::adi::DigitalOut release;
+    extern pros::adi::DigitalOut colorSort;
+    extern pros::adi::DigitalOut tipper;
 } // namespace Piston
 
 class CustomIMU : public pros::IMU {
