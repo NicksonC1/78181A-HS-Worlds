@@ -143,23 +143,32 @@ void set_up(){
 	// Roller: --------------------------------------------------------
 	autonroller = lv_roller_create(lv_scr_act());
 	lv_obj_set_pos(autonroller, 320, 36);
+	// lv_roller_set_options(autonroller,
+	// 					"Default Auton\n"
+	// 					"Solo Red\n"
+	// 					"redNeg_Q\n"
+	// 					"redPos_Q\n"
+
+	// 					"Solo Blue\n"
+	// 					"blueNeg_Q\n"
+	// 					"bluePos_Q\n"
+
+	// 					"redPos_E\n"
+	// 					"redNeg_E\n"
+
+	// 					"bluePos_El\n"
+	// 					"blueNeg_E\n"
+
+	// 					"Skills\n",
+	// 					LV_ROLLER_MODE_INFINITE);
 	lv_roller_set_options(autonroller,
 						"Default Auton\n"
-						"Solo Red\n"
-						"redNeg_Q\n"
-						"redPos_Q\n"
-
-						"Solo Blue\n"
-						"blueNeg_Q\n"
-						"bluePos_Q\n"
-
+						
 						"redPos_E\n"
 						"redNeg_E\n"
 
-						"bluePos_El\n"
-						"blueNeg_E\n"
-
-						"Skills\n",
+						"bluePos_E\n"
+						"blueNeg_E\n",
 						LV_ROLLER_MODE_INFINITE);
 	lv_obj_add_style(autonroller,&Genesis_blue ,LV_PART_INDICATOR);
 	lv_obj_set_size(autonroller, 150 ,250);
